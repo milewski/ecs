@@ -10,6 +10,7 @@ use PhpCsFixer\Fixer\WhitespacesAwareFixerInterface;
 use PhpCsFixer\FixerDefinition\CodeSample;
 use PhpCsFixer\FixerDefinition\FixerDefinition;
 use PhpCsFixer\FixerDefinition\FixerDefinitionInterface;
+use PhpCsFixer\Tokenizer\CT;
 use PhpCsFixer\Tokenizer\Token;
 use PhpCsFixer\Tokenizer\Tokens;
 use SplFileInfo;
@@ -23,7 +24,7 @@ final class FunctionParameterLayoutFixer extends AbstractFixer implements Whites
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Simple named function parameters always use one line; constructors use multiline parameters unless they have exactly one parameter and a non-empty body.',
+            summary: 'Named function body braces use separate lines. Simple named function parameters always use one line; constructors use multiline parameters unless they have exactly one parameter and a non-empty body.',
             codeSamples: [
                 new CodeSample("<?php\n\nfinal class Example\n{\n    public function __construct(public readonly string \$name)\n    {\n    }\n\n    public static function create(\n        string \$name,\n    ): self\n    {\n    }\n}\n"),
             ],
@@ -87,7 +88,7 @@ final class FunctionParameterLayoutFixer extends AbstractFixer implements Whites
 
             }
 
-            $this->placeOpeningBraceOnOwnLine($tokens, $index, $closeParenthesis);
+            $this->placeBodyBracesOnOwnLines($tokens, $index, $closeParenthesis);
 
         }
     }
@@ -100,7 +101,7 @@ final class FunctionParameterLayoutFixer extends AbstractFixer implements Whites
             return null;
         }
 
-        if ($tokens[ $nameIndex ]->equals('&')) {
+        if ($tokens[ $nameIndex ]->isGivenKind(CT::T_RETURN_REF)) {
             $nameIndex = $tokens->getNextMeaningfulToken($nameIndex);
         }
 
@@ -140,7 +141,7 @@ final class FunctionParameterLayoutFixer extends AbstractFixer implements Whites
         return count($commas) + ($hasTrailingComma ? 0 : 1);
     }
 
-    private function placeOpeningBraceOnOwnLine(Tokens $tokens, int $functionIndex, int $closeParenthesis): void
+    private function placeBodyBracesOnOwnLines(Tokens $tokens, int $functionIndex, int $closeParenthesis): void
     {
         $openBrace = $tokens->getNextTokenOfKind($closeParenthesis, [ '{', ';' ]);
 
@@ -148,23 +149,36 @@ final class FunctionParameterLayoutFixer extends AbstractFixer implements Whites
             return;
         }
 
-        $content = sprintf(
-            '%s%s',
-            $this->whitespacesConfig->getLineEnding(),
-            $this->getLineIndentation($tokens, $functionIndex),
-        );
+        $closeBrace = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_CURLY_BRACE, $openBrace);
+        $indentation = $this->getLineIndentation($tokens, $functionIndex);
+        $lineEnding = $this->whitespacesConfig->getLineEnding();
 
-        $whitespaceIndex = $openBrace - 1;
+        if ($tokens->getNextNonWhitespace($openBrace) === $closeBrace) {
 
-        if ($tokens[ $whitespaceIndex ]->isWhitespace()) {
+            $tokens->ensureWhitespaceAtIndex($openBrace + 1, 0, $lineEnding . $indentation);
 
-            $tokens[ $whitespaceIndex ] = new Token([ T_WHITESPACE, $content ]);
+        } else {
 
-            return;
+            $this->ensureLineBreakAtIndex($tokens, $closeBrace - 1, 1, $lineEnding . $indentation);
+            $this->ensureLineBreakAtIndex(
+                tokens: $tokens,
+                index: $openBrace + 1,
+                offset: 0,
+                whitespace: $lineEnding . $indentation . $this->whitespacesConfig->getIndent(),
+            );
 
         }
 
-        $tokens->insertAt($openBrace, new Token([ T_WHITESPACE, $content ]));
+        $tokens->ensureWhitespaceAtIndex($openBrace - 1, 1, $lineEnding . $indentation);
+    }
+
+    private function ensureLineBreakAtIndex(Tokens $tokens, int $index, int $offset, string $whitespace): void
+    {
+        if ($tokens[ $index ]->isWhitespace() && strpbrk($tokens[ $index ]->getContent(), "\r\n") !== false) {
+            return;
+        }
+
+        $tokens->ensureWhitespaceAtIndex($index, $offset, $whitespace);
     }
 
     private function expandConstructorParameters(Tokens $tokens, int $functionIndex, int $openParenthesis, int $closeParenthesis): void

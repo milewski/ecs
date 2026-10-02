@@ -4,7 +4,11 @@ declare(strict_types = 1);
 
 namespace DigitalCreative\ECS\Tests\Rules;
 
+use DigitalCreative\ECS\Fixers\FunctionParameterLayoutFixer;
 use DigitalCreative\ECS\Tests\Support\EcsTestCase;
+use PhpCsFixer\Tokenizer\Tokens;
+use PhpCsFixer\WhitespacesFixerConfig;
+use SplFileInfo;
 
 final class FunctionParameterLayoutFixerTest extends EcsTestCase
 {
@@ -43,6 +47,33 @@ final class FunctionParameterLayoutFixerTest extends EcsTestCase
             inputFixture: __DIR__ . '/../Fixtures/FunctionParameterLayout/opening_brace_unfixed.php',
             expectedFixture: __DIR__ . '/../Fixtures/FunctionParameterLayout/opening_brace_fixed.php',
         );
+    }
+
+    public function test_expands_compact_named_function_bodies(): void
+    {
+        $this->assertFixtureIsFixedTo(
+            inputFixture: __DIR__ . '/../Fixtures/FunctionParameterLayout/compact_body_unfixed.php',
+            expectedFixture: __DIR__ . '/../Fixtures/FunctionParameterLayout/compact_body_fixed.php',
+        );
+    }
+
+    public function test_expanded_named_function_bodies_are_idempotent(): void
+    {
+        $this->assertFixturePasses(
+            fixture: __DIR__ . '/../Fixtures/FunctionParameterLayout/compact_body_fixed.php',
+        );
+    }
+
+    public function test_body_expansion_uses_configured_indentation_and_line_endings(): void
+    {
+        $input = "<?php\r\n\r\nclass TicketOperations\r\n{\r\n\tpublic function touch(Ticket \$ticket): void {\$ticket->touch();}\r\n}\r\n";
+        $expected = "<?php\r\n\r\nclass TicketOperations\r\n{\r\n\tpublic function touch(Ticket \$ticket): void\r\n\t{\r\n\t\t\$ticket->touch();\r\n\t}\r\n}\r\n";
+        $tokens = Tokens::fromCode($input);
+        $fixer = new FunctionParameterLayoutFixer();
+        $fixer->setWhitespacesConfig(new WhitespacesFixerConfig("\t", "\r\n"));
+        $fixer->fix(new SplFileInfo('TicketOperations.php'), $tokens);
+
+        $this->assertSame($expected, $tokens->generateCode());
     }
 
     public function test_compacts_functions_regardless_of_parameter_count(): void
