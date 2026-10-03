@@ -49,7 +49,9 @@ return register_fixers([
 
 The default preset wraps calls with two or more arguments when their line exceeds 140 characters. Each argument goes on its own line, and parameter names are added when they can be resolved safely. Chains with at least two method calls wrap at 120 characters, putting each method on its own line. Short calls, short chains, and compact argument groups in existing multiline calls are preserved.
 
-Control structure headers, including `if`, `elseif`, and loop conditions, are excluded from automatic wrapping. Chains count the whole line, including assignments and trailing expressions such as `?? new Model()`, and wrap before their argument lists are considered.
+Control structure headers, including `if`, `elseif`, and loop conditions, are excluded from automatic wrapping. Calls and chains within boolean and comparison expressions also stay inline, regardless of length. Standalone chains count the whole line, including assignments and trailing expressions such as `?? new Model()`. Nested chains count their own expression, allowing a long constructor call to expand its arguments while keeping a short chain compact.
+
+`sprintf(...)` keeps its format and values on one line, even above the limit. An enclosing call places that expression on its own argument line, including single-argument calls such as `by(sprintf(...))`. Existing comments and literal multiline strings are preserved.
 
 Both rules accept a positive integer `max_line_length` option. To change the wrapping threshold in your `ecs.php` configuration:
 
@@ -64,4 +66,4 @@ return register_fixers([
 ])->withSets([ SetList::MILEWSKI ]);
 ```
 
-Single argument callbacks stay compact. Arguments whose parameter names are unavailable or whose binding depends on variadic parameters or unpacking are wrapped without changing their binding.
+Single argument callbacks stay compact. Arguments whose parameter names are unavailable or whose binding depends on variadic parameters or unpacking are wrapped without changing their binding. Builder types assigned outside a conditional remain available inside its branches; typed `when` and `unless` callbacks that return the same builder preserve that type for resolving forwarded methods such as `whereRaw(sql: ..., bindings: ...)`.

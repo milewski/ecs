@@ -46,4 +46,17 @@ final class MethodChainFixerTest extends EcsTestCase
     {
         $this->assertFixturePasses(__DIR__ . '/Fixtures/MethodChainFixer/After/InlineConditions.php');
     }
+
+    public function test_long_constructor_arguments_wrap_without_expanding_short_nested_chains(): void
+    {
+        $this->assertFixtureIsFixedTo(
+            inputFixture: __DIR__ . '/Fixtures/MethodChainFixer/Before/CustomerNotePages.php',
+            expectedFixture: __DIR__ . '/Fixtures/MethodChainFixer/After/CustomerNotePages.php',
+        );
+    }
+
+    public function test_customer_note_page_output_is_idempotent(): void
+    {
+        $this->assertFixturePasses(__DIR__ . '/Fixtures/MethodChainFixer/After/CustomerNotePages.php');
+    }
 }

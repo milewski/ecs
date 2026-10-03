@@ -4,8 +4,10 @@ declare(strict_types = 1);
 
 namespace Milewski\ECS\Fixers;
 
+use Milewski\ECS\TokenAnalyzer\BooleanExpressionAnalyzer;
 use Milewski\ECS\TokenAnalyzer\ControlStructureHeaderAnalyzer;
 use Milewski\ECS\TokenAnalyzer\LineLengthAnalyzer;
+use Milewski\ECS\TokenAnalyzer\SprintfCallAnalyzer;
 use PhpCsFixer\AbstractFixer;
 use PhpCsFixer\Fixer\ConfigurableFixerInterface;
 use PhpCsFixer\Fixer\ConfigurableFixerTrait;
@@ -62,9 +64,12 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
     protected function applyFix(SplFileInfo $file, Tokens $tokens): void
     {
+        $booleanExpressions = new BooleanExpressionAnalyzer($tokens);
+
         for ($index = 1; $index < $tokens->count(); $index++) {
 
-            $headerEnd = ControlStructureHeaderAnalyzer::findEnd($tokens, $index);
+            $headerEnd = ControlStructureHeaderAnalyzer::findEnd($tokens, $index)
+                ?? SprintfCallAnalyzer::findEnd($tokens, $index);
 
             if ($headerEnd !== null) {
 
@@ -75,6 +80,7 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
             }
 
             if ($tokens[ $index ]->isObjectOperator() === false
+                || $booleanExpressions->contains($tokens[ $index ])
                 || $this->methodParentheses($tokens, $index) === null
                 || $this->continuesMethodChain($tokens, $index)) {
                 continue;
@@ -104,7 +110,7 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
             $receiverStart = $this->receiverStart($tokens, $index);
             $indentation = $this->getLineIndentation($tokens, $receiverStart);
 
-            if ($this->lineLength($tokens, $receiverStart, $closeParenthesis, $indentation) <= $this->configuration[ 'max_line_length' ]) {
+            if ($this->lineLength($tokens, $receiverStart, $closeParenthesis) <= $this->configuration[ 'max_line_length' ]) {
                 continue;
             }
 
@@ -137,11 +143,11 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
         return false;
     }
 
-    private function lineLength(Tokens $tokens, int $start, int $end, string $indentation): int
+    private function lineLength(Tokens $tokens, int $start, int $end): int
     {
         for ($index = $start - 1; $index >= 0; $index--) {
 
-            if (preg_match('/\R/', $tokens[ $index ]->getContent()) === 1 || $tokens[ $index ]->equalsAny([ ';', '{' ])) {
+            if ($tokens[ $index ]->equalsAny([ ';', '{' ])) {
                 break;
             }
 
@@ -150,10 +156,6 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
             if ($block !== null && $block[ 'isStart' ] === false) {
 
                 $open = $tokens->findBlockStart($block[ 'type' ], $index);
-
-                if ($tokens->isPartialCodeMultiline($open, $index)) {
-                    break;
-                }
 
                 $index = $open;
 
@@ -167,13 +169,10 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
             $previous = $tokens->getPrevMeaningfulToken($index);
 
-            if ($previous !== null && ($tokens[ $previous ]->isGivenKind([
-                T_STRING, T_VARIABLE, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE,
-            ]) || $tokens[ $previous ]->equalsAny([ ')', ']' ]))) {
+            if ($previous !== null && ($tokens[ $previous ]->isGivenKind([ T_STRING, T_VARIABLE, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE ]) || $tokens[ $previous ]->equalsAny([ ')', ']' ]))) {
 
                 // The enclosing call can wrap its arguments without expanding this short nested chain.
                 $lines = preg_split('/\R/', $tokens->generatePartialCode($start, $end));
-                $lines[ 0 ] = $indentation . $lines[ 0 ];
 
                 return max(array_map(strlen(...), $lines));
 
@@ -225,9 +224,7 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
                 $start = $tokens->findBlockStart($block[ 'type' ], $start);
                 $previous = $tokens->getPrevMeaningfulToken($start);
 
-                if ($previous !== null && $tokens[ $previous ]->isGivenKind([
-                    T_STRING, T_VARIABLE, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE, T_STATIC,
-                ])) {
+                if ($previous !== null && $tokens[ $previous ]->isGivenKind([ T_STRING, T_VARIABLE, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE, T_STATIC ])) {
 
                     $start = $previous;
 

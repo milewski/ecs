@@ -117,6 +117,40 @@ final class MethodChainFixerTest extends FixerTestCase
         $this->assertSame($expected, $this->fix($input, 40, new WhitespacesFixerConfig("\t", "\r\n")));
     }
 
+    #[DataProvider('provideNestedChainContexts')]
+    public function test_short_nested_chains_exclude_the_outer_call_and_indentation(string $context): void
+    {
+        $chain = '$notes->take(CrmPageData::SIZE)->map(fn (CustomerNote $note): CustomerNoteData => $this->presentNote($note))->all()';
+        $input = "<?php\n" . str_replace('__CHAIN__', $chain, $context);
+
+        $this->assertSame($input, $this->fix($input));
+    }
+
+    public static function provideNestedChainContexts(): array
+    {
+        return [
+            'inline constructor' => [ '        return new CustomerNotePageData(__CHAIN__, $hasMore);' ],
+            'expanded constructor' => [ "        return new CustomerNotePageData(\n            notes: __CHAIN__,\n            hasMore: \$hasMore,\n        );" ],
+            'deeply indented constructor' => [ "                return new CustomerNotePageData(\n                    notes: __CHAIN__,\n                    hasMore: \$hasMore,\n                );" ],
+            'function argument' => [ '        consume(__CHAIN__, $hasMore);' ],
+            'named method argument' => [ "        \$receiver->consume(\n            notes: __CHAIN__,\n            hasMore: \$hasMore,\n        );" ],
+        ];
+    }
+
+    public function test_nested_chain_length_boundary(): void
+    {
+        $base = '$notes->take(\'\')->all()';
+        $atLimit = str_replace("''", "'" . str_repeat('x', 120 - strlen($base)) . "'", $base);
+        $aboveLimit = str_replace("''", "'" . str_repeat('x', 121 - strlen($base)) . "'", $base);
+        $input = "<?php\n        consume(" . $atLimit . ', $other);';
+
+        $this->assertSame($input, $this->fix($input));
+        $this->assertSame(
+            expected: "<?php\n        consume(" . str_replace('->', "\n            ->", $aboveLimit) . ', $other);',
+            actual: $this->fix("<?php\n        consume(" . $aboveLimit . ', $other);'),
+        );
+    }
+
     #[DataProvider('provideInvalidLimits')]
     public function test_invalid_line_length_limits_are_rejected(mixed $limit): void
     {

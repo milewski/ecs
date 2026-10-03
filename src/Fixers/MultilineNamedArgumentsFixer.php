@@ -4,8 +4,10 @@ declare(strict_types = 1);
 
 namespace Milewski\ECS\Fixers;
 
+use Milewski\ECS\TokenAnalyzer\BooleanExpressionAnalyzer;
 use Milewski\ECS\TokenAnalyzer\ControlStructureHeaderAnalyzer;
 use Milewski\ECS\TokenAnalyzer\LineLengthAnalyzer;
+use Milewski\ECS\TokenAnalyzer\SprintfCallAnalyzer;
 use PhpCsFixer\AbstractFixer;
 use PhpCsFixer\Fixer\ConfigurableFixerInterface;
 use PhpCsFixer\Fixer\ConfigurableFixerTrait;
@@ -123,6 +125,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
     protected function applyFix(SplFileInfo $file, Tokens $tokens): void
     {
+        $this->compactSprintfCalls($tokens);
         $this->expandLongCalls($tokens);
 
         do {
@@ -132,13 +135,140 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         } while ($this->expandLongCalls($tokens));
     }
 
+    private function compactSprintfCalls(Tokens $tokens): void
+    {
+        for ($index = $tokens->count() - 1; $index > 0; $index--) {
+
+            $end = SprintfCallAnalyzer::findEnd($tokens, $index);
+
+            if ($end === null || $this->canCompactCall($tokens, $index, $end) === false) {
+                continue;
+            }
+
+            $this->compactCall($tokens, $index, $end);
+
+        }
+
+    }
+
+    private function compactBooleanCalls(Tokens $tokens): void
+    {
+        $booleanExpressions = new BooleanExpressionAnalyzer($tokens);
+
+        for ($index = $tokens->count() - 1; $index > 0; $index--) {
+
+            if ($tokens[ $index ]->equals('(') === false
+                || $booleanExpressions->contains($tokens[ $index ]) === false
+                || $this->isCallArgumentList($tokens, $index) === false) {
+                continue;
+            }
+
+            $end = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $index);
+
+            if ($tokens->isPartialCodeMultiline($index, $end) === false
+                || $this->canCompactCall($tokens, $index, $end) === false) {
+                continue;
+            }
+
+            $arguments = $this->inspectArguments($tokens, $index, $end);
+            $parameters = $this->resolveCallParameters($tokens, $index);
+            $canUsePositions = $parameters !== null;
+
+            foreach ($arguments as $position => $argument) {
+
+                if ($argument[ 'unpacked' ] || ($argument[ 'name' ] !== null
+                        && (($parameters[ $position ][ 'name' ] ?? null) !== $argument[ 'name' ]
+                            || ($parameters[ $position ][ 'variadic' ] ?? false)))) {
+                    $canUsePositions = false;
+                }
+
+            }
+
+            if ($canUsePositions) {
+
+                foreach ($arguments as $argument) {
+
+                    if ($argument[ 'name' ] === null) {
+                        continue;
+                    }
+
+                    $name = $tokens->getNextMeaningfulToken($argument[ 'start' ] - 1);
+                    $colon = $tokens->getNextMeaningfulToken($name);
+                    $value = $tokens->getNextMeaningfulToken($colon);
+
+                    $tokens->clearRange($name, $value - 1);
+
+                }
+
+            }
+
+            $this->compactCall($tokens, $index, $end);
+
+        }
+    }
+
+    private function compactCall(Tokens $tokens, int $start, int $end): void
+    {
+        for ($index = $start + 1; $index < $end; $index++) {
+
+            if ($tokens[ $index ]->isWhitespace() && preg_match('/\R/', $tokens[ $index ]->getContent()) === 1) {
+                $tokens[ $index ] = new Token([ T_WHITESPACE, ' ' ]);
+            }
+
+        }
+
+        $last = $tokens->getPrevMeaningfulToken($end);
+
+        if ($tokens[ $last ]->equals(',')) {
+
+            $tokens->clearAt($last);
+
+            $last = $tokens->getPrevMeaningfulToken($end);
+
+        }
+
+        $first = $tokens->getNextMeaningfulToken($start);
+
+        for ($index = $start + 1; $index < $first; $index++) {
+
+            if ($tokens[ $index ]->isWhitespace()) {
+                $tokens->clearAt($index);
+            }
+
+        }
+
+        for ($index = $last + 1; $index < $end; $index++) {
+
+            if ($tokens[ $index ]->isWhitespace()) {
+                $tokens->clearAt($index);
+            }
+
+        }
+    }
+
+    private function canCompactCall(Tokens $tokens, int $start, int $end): bool
+    {
+        for ($index = $start + 1; $index < $end; $index++) {
+
+            if ($tokens[ $index ]->isComment() || $tokens[ $index ]->equals('{')
+                || ($tokens[ $index ]->isWhitespace() === false && preg_match('/\R/', $tokens[ $index ]->getContent()) === 1)) {
+                return false;
+            }
+
+        }
+
+        return true;
+    }
+
     private function expandLongCalls(Tokens $tokens): bool
     {
         $changed = false;
+        $booleanExpressions = new BooleanExpressionAnalyzer($tokens);
 
         for ($index = 1; $index < $tokens->count(); $index++) {
 
-            $headerEnd = ControlStructureHeaderAnalyzer::findEnd($tokens, $index);
+            $headerEnd = ControlStructureHeaderAnalyzer::findEnd($tokens, $index)
+                ?? SprintfCallAnalyzer::findEnd($tokens, $index);
 
             if ($headerEnd !== null) {
 
@@ -148,22 +278,26 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
             }
 
-            if ($tokens[ $index ]->equals('(') === false || $this->isCallArgumentList($tokens, $index) === false) {
+            if ($tokens[ $index ]->equals('(') === false
+                || $booleanExpressions->contains($tokens[ $index ])
+                || $this->isCallArgumentList($tokens, $index) === false) {
                 continue;
             }
 
             $firstToken = $tokens->getNextNonWhitespace($index);
 
-            if ($firstToken === null
-                || $tokens->isPartialCodeMultiline($index, $firstToken - 1)
-                || LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ]) {
+            if ($firstToken === null || $tokens->isPartialCodeMultiline($index, $firstToken - 1)) {
                 continue;
             }
 
             $closeParenthesis = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $index);
             $arguments = $this->argumentRanges($tokens, $index, $closeParenthesis);
+            $hasSprintfArgument = $this->hasSprintfArgument($tokens, $arguments);
+            $hasBrokenChain = $this->hasBrokenChainArgument($tokens, $arguments);
 
-            if (count($arguments) < 2) {
+            if ((count($arguments) < 2 && $hasSprintfArgument === false)
+                || ($hasSprintfArgument === false && $hasBrokenChain === false
+                    && LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ])) {
                 continue;
             }
 
@@ -184,6 +318,70 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         return $changed;
     }
 
+    /**
+     * @param list<array{start: int, end: int}> $arguments
+     */
+    private function hasSprintfArgument(Tokens $tokens, array $arguments): bool
+    {
+        foreach ($arguments as $argument) {
+
+            $start = $tokens->getNextMeaningfulToken($argument[ 'start' ] - 1);
+            $next = $tokens->getNextMeaningfulToken($start);
+
+            if ($next !== null && $tokens[ $next ]->getContent() === ':') {
+
+                $start = $tokens->getNextMeaningfulToken($next);
+                $next = $tokens->getNextMeaningfulToken($start);
+
+            }
+
+            if ($tokens[ $start ]->isGivenKind(T_NS_SEPARATOR)) {
+
+                $start = $tokens->getNextMeaningfulToken($start);
+                $next = $tokens->getNextMeaningfulToken($start);
+
+            }
+
+            if ($next !== null && SprintfCallAnalyzer::findEnd($tokens, $next) === $tokens->getPrevMeaningfulToken($argument[ 'end' ] + 1)) {
+                return true;
+            }
+
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<array{start: int, end: int}> $arguments
+     */
+    private function hasBrokenChainArgument(Tokens $tokens, array $arguments): bool
+    {
+        foreach ($arguments as $argument) {
+
+            for ($index = $argument[ 'start' ]; $index <= $argument[ 'end' ]; $index++) {
+
+                $block = Tokens::detectBlockType($tokens[ $index ]);
+
+                if ($block !== null && $block[ 'isStart' ]) {
+
+                    $index = $tokens->findBlockEnd($block[ 'type' ], $index);
+
+                    continue;
+
+                }
+
+                if ($tokens[ $index ]->isObjectOperator()
+                    && $tokens->isPartialCodeMultiline($tokens->getPrevMeaningfulToken($index), $index)) {
+                    return true;
+                }
+
+            }
+
+        }
+
+        return false;
+    }
+
     private function isCallArgumentList(Tokens $tokens, int $openParenthesis): bool
     {
         $nameIndex = $tokens->getPrevMeaningfulToken($openParenthesis);
@@ -199,9 +397,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             $previousOpen = $tokens->findBlockStart(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $nameIndex);
             $beforePreviousOpen = $tokens->getPrevMeaningfulToken($previousOpen);
 
-            return $beforePreviousOpen === null || $tokens[ $beforePreviousOpen ]->isGivenKind([
-                T_IF, T_ELSEIF, T_FOR, T_FOREACH, T_WHILE, T_SWITCH, T_MATCH, T_CATCH, T_DECLARE,
-            ]) === false;
+            return $beforePreviousOpen === null || $tokens[ $beforePreviousOpen ]->isGivenKind([ T_IF, T_ELSEIF, T_FOR, T_FOREACH, T_WHILE, T_SWITCH, T_MATCH, T_CATCH, T_DECLARE ]) === false;
 
         }
 
@@ -215,9 +411,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         $beforeName = $tokens->getPrevMeaningfulToken($nameIndex);
 
-        return $beforeName === null || $tokens[ $beforeName ]->isGivenKind([
-            T_FUNCTION, T_FN, CT::T_RETURN_REF, T_ATTRIBUTE,
-        ]) === false;
+        return $beforeName === null || $tokens[ $beforeName ]->isGivenKind([ T_FUNCTION, T_FN, CT::T_RETURN_REF, T_ATTRIBUTE ]) === false;
     }
 
     private function nameExpandedArguments(Tokens $tokens): void
@@ -243,6 +437,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         $this->resolveClassNames();
         $this->pestThisTypes = $this->collectPestThisTypes($tokens);
         $this->collectCallableDeclarations($tokens);
+        $this->compactBooleanCalls($tokens);
 
         $openParentheses = [];
 
@@ -550,7 +745,11 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
                 continue;
             }
 
-            $name = ltrim(sprintf('%s%s', $prefix, trim($parts[ 0 ])), '\\');
+            $name = ltrim(
+                string: sprintf('%s%s', $prefix, trim($parts[ 0 ])),
+                characters: '\\',
+            );
+
             $alias = $parts[ 1 ] ?? basename(str_replace('\\', '/', $name));
 
             if ($name === '' || $alias === '') {
@@ -610,14 +809,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             $previous = $tokens->getPrevMeaningfulToken($index);
 
             if ($previous !== null
-                && $tokens[ $previous ]->isGivenKind([
-                    T_OBJECT_OPERATOR,
-                    T_NULLSAFE_OBJECT_OPERATOR,
-                    T_DOUBLE_COLON,
-                    T_FUNCTION,
-                    T_FN,
-                    T_NEW,
-                ])) {
+                && $tokens[ $previous ]->isGivenKind([ T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION, T_FN, T_NEW ])) {
                 continue;
             }
 
@@ -1433,9 +1625,106 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         $ownerClass = $this->resolveReceiverClass($tokens, $innerReceiver, $position, $classIndex);
 
-        return $ownerClass === null
-            ? null
-            : $this->resolveMethodReturnClass($ownerClass, $callable[ 'name' ]);
+        if ($ownerClass === null) {
+            return null;
+        }
+
+        return $this->resolveMethodReturnClass($ownerClass, $callable[ 'name' ])
+            ?? $this->resolveConditionalMethodReturnClass(
+                tokens: $tokens,
+                ownerClass: $ownerClass,
+                method: $callable[ 'name' ],
+                openParenthesis: $callParenthesis,
+                closeParenthesis: $receiver,
+                classIndex: $classIndex,
+            );
+    }
+
+    private function resolveConditionalMethodReturnClass(Tokens $tokens, string $ownerClass, string $method, int $openParenthesis, int $closeParenthesis, ?int $classIndex): ?string
+    {
+        if (in_array(strtolower($method), [ 'when', 'unless' ], true) === false) {
+            return null;
+        }
+
+        $reflection = $this->reflectMethod($ownerClass, $method);
+        $docComment = $reflection?->getDocComment();
+
+        if ($docComment === null || $docComment === false
+            || preg_match('/@return\s+\$this\|(?<template>[A-Za-z_][A-Za-z0-9_]*)(?=\s|$)/', $docComment, $matches) !== 1
+            || preg_match('/@template\s+' . preg_quote($matches[ 'template' ], '/') . '\b/', $docComment) !== 1) {
+            return null;
+        }
+
+        $parameters = $reflection->getParameters();
+        $arguments = $this->inspectArguments($tokens, $openParenthesis, $closeParenthesis);
+
+        if (count($arguments) < 2) {
+            return null;
+        }
+
+        $hasCallback = false;
+
+        foreach ($arguments as $index => $argument) {
+
+            if ($argument[ 'unpacked' ]) {
+                return null;
+            }
+
+            $parameter = $argument[ 'name' ] ?? ($parameters[ $index ] ?? null)?->getName();
+
+            if (in_array($parameter, [ 'callback', 'default' ], true) === false) {
+                continue;
+            }
+
+            $start = $tokens->getNextMeaningfulToken($argument[ 'start' ] - 1);
+
+            if ($argument[ 'name' ] !== null) {
+                $start = $tokens->getNextMeaningfulToken($tokens->getNextMeaningfulToken($start));
+            }
+
+            if ($parameter === 'default' && $tokens[ $start ]->isGivenKind(T_STRING)
+                && strtolower($tokens[ $start ]->getContent()) === 'null'
+                && $start === $tokens->getPrevMeaningfulToken($argument[ 'end' ] + 1)) {
+                continue;
+            }
+
+            $returnClass = $this->resolveCallbackReturnClass($tokens, $start, $classIndex);
+
+            if ($returnClass === null || strcasecmp($returnClass, $ownerClass) !== 0) {
+                return null;
+            }
+
+            $hasCallback = $hasCallback || $parameter === 'callback';
+
+        }
+
+        return $hasCallback ? $ownerClass : null;
+    }
+
+    private function resolveCallbackReturnClass(Tokens $tokens, int $start, ?int $classIndex): ?string
+    {
+        if ($tokens[ $start ]->isGivenKind(T_STATIC)) {
+            $start = $tokens->getNextMeaningfulToken($start);
+        }
+
+        if ($tokens[ $start ]->isGivenKind([ T_FN, T_FUNCTION ]) === false) {
+            return null;
+        }
+
+        $openParenthesis = $tokens->getNextTokenOfKind($start, [ '(' ]);
+        $closeParenthesis = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $openParenthesis);
+        $next = $tokens->getNextMeaningfulToken($closeParenthesis);
+
+        if ($next !== null && $tokens[ $next ]->isGivenKind([ T_USE, CT::T_USE_LAMBDA ])) {
+
+            $openCapture = $tokens->getNextMeaningfulToken($next);
+            $closeParenthesis = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $openCapture);
+
+        }
+
+        $returnType = $this->readDeclaredReturnType($tokens, $closeParenthesis);
+
+        return $returnType === null ? null : $this->resolveClassReference($returnType, $start, $classIndex);
     }
 
     private function resolveClassStringFunctionClass(Tokens $tokens, int $openParenthesis, int $closeParenthesis, ?int $classIndex): ?string
@@ -1538,7 +1827,10 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
                 continue;
             }
 
-            if ($this->findContainingCurlyBlock($index) !== $useBlock
+            $assignmentBlock = $this->findContainingCurlyBlock($index);
+
+            if (($assignmentBlock !== $useBlock && $assignmentBlock !== null
+                    && $tokens->findBlockEnd(Tokens::BLOCK_TYPE_CURLY_BRACE, $assignmentBlock) < $variableIndex)
                 || $this->isConditionalAssignment($tokens, $index)) {
                 return [ 'found' => true, 'class' => null ];
             }
@@ -2281,11 +2573,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         foreach ($lines as $line) {
 
-            if (preg_match(
-                pattern: '/@method\s+(?:static\s+)?(?:(?<returnType>[^\s(]+)\s+)?(?<method>[A-Za-z_][A-Za-z0-9_]*)\s*\((?<parameters>.*)\)/',
-                subject: $line,
-                matches: $matches,
-            ) !== 1 || strcasecmp($matches[ 'method' ], $method) !== 0) {
+            if (preg_match('/@method\s+(?:static\s+)?(?:(?<returnType>[^\s(]+)\s+)?(?<method>[A-Za-z_][A-Za-z0-9_]*)\s*\((?<parameters>.*)\)/', $line, $matches) !== 1 || strcasecmp($matches[ 'method' ], $method) !== 0) {
                 continue;
             }
 
@@ -2319,12 +2607,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         foreach ($this->splitTopLevelParameters($parameters) as $parameter) {
 
-            if (preg_match_all(
-                pattern: '/&?\s*(?<variadic>\.\.\.)?\s*\$(?<name>[A-Za-z_][A-Za-z0-9_]*)/',
-                subject: $parameter,
-                matches: $matches,
-                flags: PREG_SET_ORDER,
-            ) < 1) {
+            if (preg_match_all('/&?\s*(?<variadic>\.\.\.)?\s*\$(?<name>[A-Za-z_][A-Za-z0-9_]*)/', $parameter, $matches, PREG_SET_ORDER) < 1) {
                 return null;
             }
 
