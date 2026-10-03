@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\LaravelEmptyToBlankFixer;
+namespace Milewski\ECS\Tests\Fixtures\LaravelEmptyToBlankFixer;
 
 final class EmptyChecks
 {

@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\NewExpressionParenthesesFixer;
+namespace Milewski\ECS\Tests\Fixtures\NewExpressionParenthesesFixer;
 
 final class Example
 {

@@ -2,9 +2,9 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Rules;
+namespace Milewski\ECS\Tests\Rules;
 
-use DigitalCreative\ECS\Tests\Support\EcsTestCase;
+use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class PaddedBlockFixerTest extends EcsTestCase
 {

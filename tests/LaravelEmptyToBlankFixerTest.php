@@ -2,9 +2,9 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests;
+namespace Milewski\ECS\Tests;
 
-use DigitalCreative\ECS\Tests\Support\EcsTestCase;
+use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class LaravelEmptyToBlankFixerTest extends EcsTestCase
 {

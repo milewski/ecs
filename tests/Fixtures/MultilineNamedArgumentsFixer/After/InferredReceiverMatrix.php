@@ -2,10 +2,10 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
+namespace Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
 
-use DigitalCreative\ECS\Tests\Support\ReflectionCastHolder;
-use DigitalCreative\ECS\Tests\Support\ReflectionEnumCollectionCast;
+use Milewski\ECS\Tests\Support\ReflectionCastHolder;
+use Milewski\ECS\Tests\Support\ReflectionEnumCollectionCast;
 
 function make_fixture_cast(): ReflectionEnumCollectionCast
 {

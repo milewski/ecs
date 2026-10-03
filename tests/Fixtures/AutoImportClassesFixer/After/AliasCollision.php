@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\AutoImportClassesFixer;
+namespace Milewski\ECS\Tests\Fixtures\AutoImportClassesFixer;
 
 use App\Support\CarbonCarbon;
 use Carbon\Carbon as CarbonCarbon2;

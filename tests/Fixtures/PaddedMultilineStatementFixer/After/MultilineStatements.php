@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\PaddedMultilineStatementFixer;
+namespace Milewski\ECS\Tests\Fixtures\PaddedMultilineStatementFixer;
 
 final class MultilineStatements
 {

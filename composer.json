@@ -1,5 +1,5 @@
 {
-    "name": "digital-creative/ecs",
+    "name": "milewski/ecs",
     "description": "Standard code style configuration",
     "require": {
         "php": ">=8.4",
@@ -11,7 +11,7 @@
     },
     "autoload": {
         "psr-4": {
-            "DigitalCreative\\ECS\\": "src/"
+            "Milewski\\ECS\\": "src/"
         },
         "files": [
             "helpers/functions.php"
@@ -19,7 +19,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "DigitalCreative\\ECS\\Tests\\": "tests/"
+            "Milewski\\ECS\\Tests\\": "tests/"
         },
         "files": [
             "tests/Support/complex_return_app.php"

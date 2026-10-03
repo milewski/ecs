@@ -2,9 +2,9 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
+namespace Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
 
-use DigitalCreative\ECS\Tests\Support\ReflectionMemoryManager;
+use Milewski\ECS\Tests\Support\ReflectionMemoryManager;
 
 final class OAuthUser
 {

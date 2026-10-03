@@ -2,11 +2,11 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
+namespace Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
 
-use DigitalCreative\ECS\Tests\Support\ReflectionRecordManager as RecordManager;
+use Milewski\ECS\Tests\Support\ReflectionRecordManager as RecordManager;
 
-use function DigitalCreative\ECS\Tests\Support\complex_return_app;
+use function Milewski\ECS\Tests\Support\complex_return_app;
 
 abstract class ComplexReturnTypeClassStringCalls
 {

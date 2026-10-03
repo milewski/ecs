@@ -2,9 +2,9 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Rules;
+namespace Milewski\ECS\Tests\Rules;
 
-use DigitalCreative\ECS\Fixers\MethodChainFixer;
+use Milewski\ECS\Fixers\MethodChainFixer;
 use PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException;
 use PhpCsFixer\Tokenizer\Tokens;
 use PhpCsFixer\WhitespacesFixerConfig;

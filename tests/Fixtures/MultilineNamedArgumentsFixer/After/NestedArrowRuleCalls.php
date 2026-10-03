@@ -2,9 +2,9 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
+namespace Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
 
-use DigitalCreative\ECS\Tests\Support\ReflectionUniqueRule as Unique;
+use Milewski\ECS\Tests\Support\ReflectionUniqueRule as Unique;
 
 final class ReportingUser
 {

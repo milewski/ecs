@@ -2,10 +2,10 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
+namespace Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
 
-use DigitalCreative\ECS\Tests\Support\ReflectionDatabaseConnection;
-use DigitalCreative\ECS\Tests\Support\ReflectionMagicConnectionFacade;
+use Milewski\ECS\Tests\Support\ReflectionDatabaseConnection;
+use Milewski\ECS\Tests\Support\ReflectionMagicConnectionFacade;
 use stdClass;
 
 if (random_int(0, 1) === 1) {

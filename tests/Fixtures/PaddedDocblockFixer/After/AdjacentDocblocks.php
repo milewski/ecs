@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\PaddedDocblockFixer;
+namespace Milewski\ECS\Tests\Fixtures\PaddedDocblockFixer;
 
 final class AdjacentDocblocks
 {

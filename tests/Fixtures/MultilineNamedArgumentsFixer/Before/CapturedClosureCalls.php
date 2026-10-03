@@ -2,11 +2,11 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
+namespace Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
 
-use DigitalCreative\ECS\Tests\Support\ReflectionDatabaseConnection;
-use DigitalCreative\ECS\Tests\Support\ReflectionMagicConnectionFacade;
-use DigitalCreative\ECS\Tests\Support\ReflectionPestTestCase;
+use Milewski\ECS\Tests\Support\ReflectionDatabaseConnection;
+use Milewski\ECS\Tests\Support\ReflectionMagicConnectionFacade;
+use Milewski\ECS\Tests\Support\ReflectionPestTestCase;
 use stdClass;
 
 uses(ReflectionPestTestCase::class);

@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Library {
+namespace Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Library {
 
     function assemble(string $key, array $value): array
     {
@@ -18,11 +18,11 @@ namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Librar
     }
 }
 
-namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Application {
+namespace Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Application {
 
-    use function DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Library\assemble as assemble_payload;
+    use function Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Library\assemble as assemble_payload;
 
-    use DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Library\Payload as ImportedPayload;
+    use Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Library\Payload as ImportedPayload;
 
     class BaseHandler
     {
@@ -45,7 +45,7 @@ namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Applic
                 value: $payload,
             );
 
-            \DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Library\assemble(
+            \Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\Library\assemble(
                 key: 'qualified',
                 value: $payload,
             );

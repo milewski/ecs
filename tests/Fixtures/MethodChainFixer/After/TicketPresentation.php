@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\MethodChainFixer;
+namespace Milewski\ECS\Tests\Fixtures\MethodChainFixer;
 
 final class TicketMessageData
 {

@@ -7,12 +7,12 @@
 "repositories": [
     {
         "type": "vcs",
-        "url": "https://github.com/dcasia/ecs.git"
+        "url": "https://github.com/milewski/ecs.git"
     }
 ]
 ```
 
-- Then install it via `composer require digital-creative/ecs`
+- Then install it via `composer require milewski/ecs`
 
 - Create a file named `ecs.php` in the root directory of your project with the following content:
 
@@ -21,7 +21,7 @@
 
 declare(strict_types = 1);
 
-use DigitalCreative\ECS\ValueObject\SetList;
+use Milewski\ECS\ValueObject\SetList;
 use PhpCsFixer\Fixer\ClassNotation\ClassDefinitionFixer;
 use PhpCsFixer\Fixer\ClassNotation\NoBlankLinesAfterClassOpeningFixer;
 use PhpCsFixer\Fixer\FunctionNotation\VoidReturnFixer;
@@ -32,7 +32,7 @@ return register_fixers([
     VoidReturnFixer::class => true,
 ])
     ->withParallel()
-     ->withSets([ SetList::DIGITAL_CREATIVE ])
+     ->withSets([ SetList::MILEWSKI ])
     ->withPaths([
         __DIR__,
         __DIR__ . '/app',
@@ -52,14 +52,14 @@ The default preset wraps calls with two or more arguments when their line exceed
 Both rules accept a positive integer `max_line_length` option. To change the wrapping threshold in your `ecs.php` configuration:
 
 ```php
-use DigitalCreative\ECS\Fixers\MethodChainFixer;
-use DigitalCreative\ECS\Fixers\MultilineNamedArgumentsFixer;
-use DigitalCreative\ECS\ValueObject\SetList;
+use Milewski\ECS\Fixers\MethodChainFixer;
+use Milewski\ECS\Fixers\MultilineNamedArgumentsFixer;
+use Milewski\ECS\ValueObject\SetList;
 
 return register_fixers([
     MethodChainFixer::class => [ 'max_line_length' => 120 ],
     MultilineNamedArgumentsFixer::class => [ 'max_line_length' => 120 ],
-])->withSets([ SetList::DIGITAL_CREATIVE ]);
+])->withSets([ SetList::MILEWSKI ]);
 ```
 
 Single argument callbacks stay compact. Arguments whose parameter names are unavailable or whose binding depends on variadic parameters or unpacking are wrapped without changing their binding.

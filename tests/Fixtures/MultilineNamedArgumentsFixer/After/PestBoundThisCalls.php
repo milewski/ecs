@@ -2,11 +2,11 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
+namespace Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
 
-use DigitalCreative\ECS\Tests\Support\ReflectionPestAssertions;
-use DigitalCreative\ECS\Tests\Support\ReflectionPestTestCase;
 use LogicException;
+use Milewski\ECS\Tests\Support\ReflectionPestAssertions;
+use Milewski\ECS\Tests\Support\ReflectionPestTestCase;
 
 final class Experiment
 {

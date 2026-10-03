@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\ClassOpeningBracketFixer;
+namespace Milewski\ECS\Tests\Fixtures\ClassOpeningBracketFixer;
 
 final class AnonymousOperation
 {

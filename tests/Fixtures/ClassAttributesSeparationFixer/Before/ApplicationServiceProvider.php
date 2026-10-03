@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\ClassAttributesSeparationFixer;
+namespace Milewski\ECS\Tests\Fixtures\ClassAttributesSeparationFixer;
 
 final class ApplicationServiceProvider
 {

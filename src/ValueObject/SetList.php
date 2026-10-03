@@ -2,9 +2,9 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\ValueObject;
+namespace Milewski\ECS\ValueObject;
 
 final class SetList
 {
-    public const string DIGITAL_CREATIVE = __DIR__ . '/../Custom.php';
+    public const string MILEWSKI = __DIR__ . '/../Custom.php';
 }

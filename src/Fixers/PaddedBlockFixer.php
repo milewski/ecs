@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Fixers;
+namespace Milewski\ECS\Fixers;
 
 use Exception;
 use PhpCsFixer\AbstractFixer;

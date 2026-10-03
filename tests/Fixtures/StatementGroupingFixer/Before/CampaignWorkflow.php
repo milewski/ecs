@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\StatementGroupingFixer;
+namespace Milewski\ECS\Tests\Fixtures\StatementGroupingFixer;
 
 final class CampaignWorkflow
 {

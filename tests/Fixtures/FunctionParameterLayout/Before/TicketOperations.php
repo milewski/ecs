@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\FunctionParameterLayout;
+namespace Milewski\ECS\Tests\Fixtures\FunctionParameterLayout;
 
 final class TicketOperations
 {

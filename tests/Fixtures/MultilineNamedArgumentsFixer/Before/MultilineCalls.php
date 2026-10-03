@@ -2,12 +2,12 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
+namespace Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer;
 
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
-use function DigitalCreative\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\build_payload as make_payload;
+use function Milewski\ECS\Tests\Fixtures\MultilineNamedArgumentsFixer\build_payload as make_payload;
 
 function build_payload(string $prefix, array $payload): array
 {

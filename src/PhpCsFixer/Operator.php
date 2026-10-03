@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\PhpCsFixer;
+namespace Milewski\ECS\PhpCsFixer;
 
 use PhpCsFixer\Fixer\Operator\AssignNullCoalescingToCoalesceEqualFixer;
 use PhpCsFixer\Fixer\Operator\BinaryOperatorSpacesFixer;

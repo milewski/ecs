@@ -2,26 +2,26 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS;
+namespace Milewski\ECS;
 
-use DigitalCreative\ECS\Fixers\AutoImportClassesFixer;
-use DigitalCreative\ECS\Fixers\ClassOpeningBracketFixer;
-use DigitalCreative\ECS\Fixers\ConstructorBracesFixer;
-use DigitalCreative\ECS\Fixers\DescriptiveVariableNameFixer;
-use DigitalCreative\ECS\Fixers\FunctionParameterLayoutFixer;
-use DigitalCreative\ECS\Fixers\LaravelEmptyToBlankFixer;
-use DigitalCreative\ECS\Fixers\MethodChainFixer;
-use DigitalCreative\ECS\Fixers\MultilineNamedArgumentsFixer;
-use DigitalCreative\ECS\Fixers\NoPointlessMixedPhpdocFixer;
-use DigitalCreative\ECS\Fixers\PaddedArrayFixer;
-use DigitalCreative\ECS\Fixers\PaddedBlockFixer;
-use DigitalCreative\ECS\Fixers\PaddedDocblockFixer;
-use DigitalCreative\ECS\Fixers\PaddedMultilineStatementFixer;
-use DigitalCreative\ECS\Fixers\SnakeCaseGlobalFunctionNameFixer;
-use DigitalCreative\ECS\Fixers\StatementGroupingFixer;
-use DigitalCreative\ECS\Fixers\TraitUseSpacingFixer;
-use DigitalCreative\ECS\Sniffs\ForbidSwitchStatementSniff;
-use DigitalCreative\ECS\Sniffs\RequireParameterTypeSniff;
+use Milewski\ECS\Fixers\AutoImportClassesFixer;
+use Milewski\ECS\Fixers\ClassOpeningBracketFixer;
+use Milewski\ECS\Fixers\ConstructorBracesFixer;
+use Milewski\ECS\Fixers\DescriptiveVariableNameFixer;
+use Milewski\ECS\Fixers\FunctionParameterLayoutFixer;
+use Milewski\ECS\Fixers\LaravelEmptyToBlankFixer;
+use Milewski\ECS\Fixers\MethodChainFixer;
+use Milewski\ECS\Fixers\MultilineNamedArgumentsFixer;
+use Milewski\ECS\Fixers\NoPointlessMixedPhpdocFixer;
+use Milewski\ECS\Fixers\PaddedArrayFixer;
+use Milewski\ECS\Fixers\PaddedBlockFixer;
+use Milewski\ECS\Fixers\PaddedDocblockFixer;
+use Milewski\ECS\Fixers\PaddedMultilineStatementFixer;
+use Milewski\ECS\Fixers\SnakeCaseGlobalFunctionNameFixer;
+use Milewski\ECS\Fixers\StatementGroupingFixer;
+use Milewski\ECS\Fixers\TraitUseSpacingFixer;
+use Milewski\ECS\Sniffs\ForbidSwitchStatementSniff;
+use Milewski\ECS\Sniffs\RequireParameterTypeSniff;
 
 return register_fixers(fixers: [
     AutoImportClassesFixer::class => true,

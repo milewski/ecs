@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\NoPointlessMixedPhpdocFixer;
+namespace Milewski\ECS\Tests\Fixtures\NoPointlessMixedPhpdocFixer;
 
 final class PointlessMixedPhpdocs
 {

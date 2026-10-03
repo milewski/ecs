@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\PhpCsFixer;
+namespace Milewski\ECS\PhpCsFixer;
 
 use PhpCsFixer\Fixer\Casing\ClassReferenceNameCasingFixer;
 use PhpCsFixer\Fixer\Casing\ConstantCaseFixer;

@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\ConstructorBracesFixer;
+namespace Milewski\ECS\Tests\Fixtures\ConstructorBracesFixer;
 
 final class EmptyBodyOnFollowingLineData
 {

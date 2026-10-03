@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Support;
+namespace Milewski\ECS\Tests\Support;
 
 use RuntimeException;
 use Symplify\EasyCodingStandard\FixerRunner\Application\FixerFileProcessor;
@@ -58,7 +58,7 @@ abstract class EcsTestCase extends AbstractCheckerTestCase
         self::assertNotEmpty($this->fixerFileProcessor->getCheckers(), 'The ECS configuration registered no fixers.');
 
         $temporaryDirectory = sprintf(
-            '%s/digital-creative-ecs-tests/%s',
+            '%s/milewski-ecs-tests/%s',
             sys_get_temp_dir(),
             bin2hex(random_bytes(16)),
         );

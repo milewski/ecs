@@ -2,7 +2,7 @@
 
 declare(strict_types = 1);
 
-namespace DigitalCreative\ECS\Tests\Fixtures\DescriptiveVariableNameFixer;
+namespace Milewski\ECS\Tests\Fixtures\DescriptiveVariableNameFixer;
 
 use Closure;
 use Vendor\Permissions\McpResourcePermission;
