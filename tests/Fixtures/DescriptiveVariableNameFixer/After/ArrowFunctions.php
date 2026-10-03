@@ -13,10 +13,22 @@ final class ArrowFunctions
     public function abilities(): array
     {
         return [
-            ...array_map(static fn (McpResourcePermission $permission): string => $permission->ability(), McpResourcePermission::cases()),
-            ...array_map(static fn (McpToolPermission $permission): string => $permission->ability(), McpToolPermission::cases()),
-            ...array_map(static fn (McpResourcePermission $permission): string => $permission->ability(), McpResourcePermission::cases()),
-            ...array_map(static fn (PromptPermissionAlias $permission): string => $permission->ability(), PromptPermissionAlias::cases()),
+            ...array_map(
+                callback: static fn (McpResourcePermission $permission): string => $permission->ability(),
+                array: McpResourcePermission::cases(),
+            ),
+            ...array_map(
+                callback: static fn (McpToolPermission $permission): string => $permission->ability(),
+                array: McpToolPermission::cases(),
+            ),
+            ...array_map(
+                callback: static fn (McpResourcePermission $permission): string => $permission->ability(),
+                array: McpResourcePermission::cases(),
+            ),
+            ...array_map(
+                callback: static fn (PromptPermissionAlias $permission): string => $permission->ability(),
+                array: PromptPermissionAlias::cases(),
+            ),
         ];
     }
 }

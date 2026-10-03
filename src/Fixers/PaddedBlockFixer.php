@@ -33,7 +33,8 @@ final class PaddedBlockFixer extends AbstractFixer implements WhitespacesAwareFi
 
     public function getPriority(): int
     {
-        return 1000;
+        // Apply padding after long calls have made previously compact blocks multiline.
+        return -80;
     }
 
     /**

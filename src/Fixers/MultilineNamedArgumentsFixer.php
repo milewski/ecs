@@ -5,6 +5,13 @@ declare(strict_types = 1);
 namespace DigitalCreative\ECS\Fixers;
 
 use PhpCsFixer\AbstractFixer;
+use PhpCsFixer\Fixer\ConfigurableFixerInterface;
+use PhpCsFixer\Fixer\ConfigurableFixerTrait;
+use PhpCsFixer\Fixer\IndentationTrait;
+use PhpCsFixer\Fixer\WhitespacesAwareFixerInterface;
+use PhpCsFixer\FixerConfiguration\FixerConfigurationResolver;
+use PhpCsFixer\FixerConfiguration\FixerConfigurationResolverInterface;
+use PhpCsFixer\FixerConfiguration\FixerOptionBuilder;
 use PhpCsFixer\FixerDefinition\CodeSample;
 use PhpCsFixer\FixerDefinition\FixerDefinition;
 use PhpCsFixer\FixerDefinition\FixerDefinitionInterface;
@@ -19,8 +26,11 @@ use ReflectionParameter;
 use SplFileInfo;
 use Throwable;
 
-final class MultilineNamedArgumentsFixer extends AbstractFixer
+final class MultilineNamedArgumentsFixer extends AbstractFixer implements ConfigurableFixerInterface, WhitespacesAwareFixerInterface
 {
+    use ConfigurableFixerTrait;
+    use IndentationTrait;
+
     /**
      * @var list<array{
      *     start: int,
@@ -80,7 +90,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Arguments in expanded multiline calls are named when there are at least two arguments and the callable parameter names can be resolved safely.',
+            summary: 'Long calls are expanded onto multiple lines. Expanded calls with at least two arguments use named arguments when parameter names can be resolved safely.',
             codeSamples: [
                 new CodeSample("<?php\n\njson_decode(\n    \$json,\n    true,\n    flags: JSON_THROW_ON_ERROR,\n);\n"),
             ],
@@ -89,20 +99,145 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer
 
     public function getPriority(): int
     {
-        return -50;
+        // Wrap before argument spacing, array indentation, trailing commas, and statement indentation.
+        return 31;
     }
 
     public function isCandidate(Tokens $tokens): bool
     {
-        return $tokens->isAnyTokenKindsFound([
-            T_STRING,
-            T_NAME_QUALIFIED,
-            T_NAME_FULLY_QUALIFIED,
-            T_NAME_RELATIVE,
+        return $tokens->isTokenKindFound('(');
+    }
+
+    protected function createConfigurationDefinition(): FixerConfigurationResolverInterface
+    {
+        return new FixerConfigurationResolver([
+            new FixerOptionBuilder('max_line_length', 'Expand call argument lists on lines longer than this limit.')
+                ->setAllowedTypes([ 'int' ])
+                ->setAllowedValues([ static fn (int $length): bool => $length > 0 ])
+                ->setDefault(120)
+                ->getOption(),
         ]);
     }
 
     protected function applyFix(SplFileInfo $file, Tokens $tokens): void
+    {
+        $this->expandLongCalls($tokens);
+
+        do {
+
+            $this->nameExpandedArguments($tokens);
+
+        } while ($this->expandLongCalls($tokens));
+    }
+
+    private function expandLongCalls(Tokens $tokens): bool
+    {
+        $changed = false;
+
+        for ($index = 1; $index < $tokens->count(); $index++) {
+
+            if ($tokens[ $index ]->equals('(') === false || $this->isCallArgumentList($tokens, $index) === false) {
+                continue;
+            }
+
+            $firstToken = $tokens->getNextNonWhitespace($index);
+
+            if ($firstToken === null
+                || $tokens->isPartialCodeMultiline($index, $firstToken - 1)
+                || $this->lineLength($tokens, $index) <= $this->configuration[ 'max_line_length' ]) {
+                continue;
+            }
+
+            $closeParenthesis = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $index);
+            $arguments = $this->argumentRanges($tokens, $index, $closeParenthesis);
+
+            if (count($arguments) < 2) {
+                continue;
+            }
+
+            $indentation = $this->getLineIndentation($tokens, $index);
+            $lineEnding = $this->whitespacesConfig->getLineEnding();
+            $argumentIndentation = $lineEnding . $indentation . $this->whitespacesConfig->getIndent();
+
+            $tokens->ensureWhitespaceAtIndex($closeParenthesis - 1, 1, $lineEnding . $indentation);
+
+            for ($argumentIndex = count($arguments) - 1; $argumentIndex >= 0; $argumentIndex--) {
+                $tokens->ensureWhitespaceAtIndex($arguments[ $argumentIndex ][ 'start' ], 0, $argumentIndentation);
+            }
+
+            $changed = true;
+
+        }
+
+        return $changed;
+    }
+
+    private function isCallArgumentList(Tokens $tokens, int $openParenthesis): bool
+    {
+        $nameIndex = $tokens->getPrevMeaningfulToken($openParenthesis);
+
+        if ($nameIndex === null) {
+            return false;
+        }
+
+        $token = $tokens[ $nameIndex ];
+
+        if ($token->equals(')')) {
+
+            $previousOpen = $tokens->findBlockStart(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $nameIndex);
+            $beforePreviousOpen = $tokens->getPrevMeaningfulToken($previousOpen);
+
+            return $beforePreviousOpen === null || $tokens[ $beforePreviousOpen ]->isGivenKind([
+                T_IF, T_ELSEIF, T_FOR, T_FOREACH, T_WHILE, T_SWITCH, T_MATCH, T_CATCH, T_DECLARE,
+            ]) === false;
+
+        }
+
+        if ($token->getContent() === ']') {
+            return true;
+        }
+
+        if ($this->isNameToken($token) === false && $token->isGivenKind([ T_VARIABLE, T_CLASS ]) === false) {
+            return false;
+        }
+
+        $beforeName = $tokens->getPrevMeaningfulToken($nameIndex);
+
+        return $beforeName === null || $tokens[ $beforeName ]->isGivenKind([
+            T_FUNCTION, T_FN, CT::T_RETURN_REF, T_ATTRIBUTE,
+        ]) === false;
+    }
+
+    private function lineLength(Tokens $tokens, int $index): int
+    {
+        $length = 0;
+
+        for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
+
+            $lines = preg_split('/\R/', $tokens[ $cursor ]->getContent());
+            $length += strlen($lines[ count($lines) - 1 ]);
+
+            if (count($lines) > 1) {
+                break;
+            }
+
+        }
+
+        for ($cursor = $index; $cursor < $tokens->count(); $cursor++) {
+
+            $lines = preg_split('/\R/', $tokens[ $cursor ]->getContent());
+            $length += strlen($lines[ 0 ]);
+
+            if (count($lines) > 1) {
+                break;
+            }
+
+        }
+
+        return $length;
+    }
+
+    private function nameExpandedArguments(Tokens $tokens): void
     {
         $this->namespaceContexts = $this->collectNamespaceContexts($tokens);
         $this->classes = $this->collectClassScopes($tokens);
@@ -172,8 +307,8 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer
                 $name = $names[ $nameIndex ];
 
                 $tokens->insertAt($name[ 'index' ], [
-                    new Token([ T_STRING, $name[ 'name' ] ]),
-                    new Token(':'),
+                    new Token([ CT::T_NAMED_ARGUMENT_NAME, $name[ 'name' ] ]),
+                    new Token([ CT::T_NAMED_ARGUMENT_COLON, ':' ]),
                     new Token([ T_WHITESPACE, ' ' ]),
                 ]);
 
@@ -462,7 +597,12 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer
             }
 
             if ($class[ 'rawParent' ] !== null) {
-                $this->classes[ $index ][ 'parent' ] = $this->resolveClassIdentifier($class[ 'rawParent' ], $class[ 'start' ]);
+
+                $this->classes[ $index ][ 'parent' ] = $this->resolveClassIdentifier(
+                    name: $class[ 'rawParent' ],
+                    position: $class[ 'start' ],
+                );
+
             }
 
         }

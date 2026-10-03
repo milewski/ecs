@@ -57,6 +57,12 @@ final class SnakeCaseGlobalFunctionNameFixer extends AbstractFixer
         );
     }
 
+    public function getPriority(): int
+    {
+        // Finalize callable names before measuring call line lengths.
+        return 45;
+    }
+
     public function isCandidate(Tokens $tokens): bool
     {
         return $tokens->isTokenKindFound(T_FUNCTION);

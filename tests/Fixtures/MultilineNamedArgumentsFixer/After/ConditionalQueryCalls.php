@@ -41,7 +41,11 @@ final class ConditionalQueryCalls
             ->where('ad_account', $candidate->ad_account)
             ->when(
                 value: $candidate->effective_to !== null,
-                callback: static fn (Builder $query): Builder => $query->where('effective_from', '<=', $candidate->effective_to?->toDateString()),
+                callback: static fn (Builder $query): Builder => $query->where(
+                    column: 'effective_from',
+                    operator: '<=',
+                    value: $candidate->effective_to?->toDateString(),
+                ),
             );
     }
 }

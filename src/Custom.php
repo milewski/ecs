@@ -10,6 +10,7 @@ use DigitalCreative\ECS\Fixers\ConstructorBracesFixer;
 use DigitalCreative\ECS\Fixers\DescriptiveVariableNameFixer;
 use DigitalCreative\ECS\Fixers\FunctionParameterLayoutFixer;
 use DigitalCreative\ECS\Fixers\LaravelEmptyToBlankFixer;
+use DigitalCreative\ECS\Fixers\MethodChainFixer;
 use DigitalCreative\ECS\Fixers\MultilineNamedArgumentsFixer;
 use DigitalCreative\ECS\Fixers\NoPointlessMixedPhpdocFixer;
 use DigitalCreative\ECS\Fixers\PaddedArrayFixer;
@@ -34,6 +35,7 @@ return register_fixers(fixers: [
     ConstructorBracesFixer::class => true,
     DescriptiveVariableNameFixer::class => true,
     FunctionParameterLayoutFixer::class => true,
+    MethodChainFixer::class => true,
     MultilineNamedArgumentsFixer::class => true,
     NoPointlessMixedPhpdocFixer::class => true,
     SnakeCaseGlobalFunctionNameFixer::class => true,

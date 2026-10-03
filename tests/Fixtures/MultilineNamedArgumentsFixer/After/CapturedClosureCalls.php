@@ -15,32 +15,35 @@ $connection = ReflectionMagicConnectionFacade::connection('events');
 $directConnection = new ReflectionDatabaseConnection();
 $reportingRole = 'reporting';
 
-test('captured receivers retain their inferred type', function () use ($connection, $directConnection, $reportingRole): void {
+test(
+    'captured receivers retain their inferred type',
+    function () use ($connection, $directConnection, $reportingRole): void {
 
-    $directConnection->selectOne(
-        query: 'directly constructed captured receiver',
-        bindings: [ $reportingRole ],
-    );
-
-    $connection->transaction(function () use ($connection, $reportingRole): object {
-
-        $attributes = $connection->selectOne(
-            query: 'select * from pg_roles where rolname = ?',
+        $directConnection->selectOne(
+            query: 'directly constructed captured receiver',
             bindings: [ $reportingRole ],
         );
 
-        return $attributes ?? new stdClass();
+        $connection->transaction(function () use ($connection, $reportingRole): object {
 
-    });
+            $attributes = $connection->selectOne(
+                query: 'select * from pg_roles where rolname = ?',
+                bindings: [ $reportingRole ],
+            );
 
-    $lookup = static fn (): ?object => $connection->selectOne(
-        query: 'select * from pg_roles where rolname in (?, ?)',
-        bindings: [ new stdClass(), $reportingRole ],
-    );
+            return $attributes ?? new stdClass();
 
-    unset($lookup);
+        });
 
-});
+        $lookup = static fn (): ?object => $connection->selectOne(
+            query: 'select * from pg_roles where rolname in (?, ?)',
+            bindings: [ new stdClass(), $reportingRole ],
+        );
+
+        unset($lookup);
+
+    },
+);
 
 return new class ()
 {

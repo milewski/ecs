@@ -44,3 +44,22 @@ return register_fixers([
 ```
 
 - Run the `./vendor/bin/ecs check --fix`
+
+## Long calls and method chains
+
+The default preset wraps calls with two or more arguments when their line exceeds 120 characters. Each argument goes on its own line, and parameter names are added when they can be resolved safely. Long chains with at least two method calls also put each method on its own line. Short calls, short chains, and compact argument groups in existing multiline calls are preserved.
+
+Both rules accept a positive integer `max_line_length` option. To change the wrapping threshold in your `ecs.php` configuration:
+
+```php
+use DigitalCreative\ECS\Fixers\MethodChainFixer;
+use DigitalCreative\ECS\Fixers\MultilineNamedArgumentsFixer;
+use DigitalCreative\ECS\ValueObject\SetList;
+
+return register_fixers([
+    MethodChainFixer::class => [ 'max_line_length' => 120 ],
+    MultilineNamedArgumentsFixer::class => [ 'max_line_length' => 120 ],
+])->withSets([ SetList::DIGITAL_CREATIVE ]);
+```
+
+Single argument callbacks stay compact. Arguments whose parameter names are unavailable or whose binding depends on variadic parameters or unpacking are wrapped without changing their binding.

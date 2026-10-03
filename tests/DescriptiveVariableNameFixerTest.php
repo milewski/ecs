@@ -8,13 +8,52 @@ use DigitalCreative\ECS\Tests\Support\EcsTestCase;
 
 final class DescriptiveVariableNameFixerTest extends EcsTestCase
 {
+    public function test_call_argument_names_use_the_renamed_parameter(): void
+    {
+        $input = <<<'PHP'
+        <?php
+
+        declare(strict_types = 1);
+
+        final class ArgumentNames
+        {
+            public function call(Ticket $ticket): TicketData
+            {
+                return $this->present(
+                    $ticket,
+                    false,
+                );
+            }
+
+            private function present(Ticket $t, bool $archived): TicketData
+            {
+                return new TicketData($t, $archived);
+            }
+        }
+
+        PHP;
+
+        $expected = str_replace(
+            search: [ 'Ticket $t,', 'TicketData($t,', "            \$ticket,\n            false," ],
+            replace: [ 'Ticket $ticket,', 'TicketData($ticket,', "            ticket: \$ticket,\n            archived: false," ],
+            subject: $input,
+        );
+
+        $this->assertCodeIsFixedTo($input, $expected, 'ArgumentNames.php');
+    }
+
+    public function test_renamed_callback_output_is_idempotent(): void
+    {
+        $this->assertFixturePasses(__DIR__ . '/Fixtures/DescriptiveVariableNameFixer/After/ArrowFunctions.php');
+    }
+
     public function test_single_letters_and_type_related_abbreviations_are_replaced(): void
     {
         $fixtureDirectory = __DIR__ . '/Fixtures/DescriptiveVariableNameFixer';
 
         $this->assertFixtureIsFixedTo(
-            $fixtureDirectory . '/Before/ArrowFunctions.php',
-            $fixtureDirectory . '/After/ArrowFunctions.php',
+            inputFixture: $fixtureDirectory . '/Before/ArrowFunctions.php',
+            expectedFixture: $fixtureDirectory . '/After/ArrowFunctions.php',
         );
     }
 
@@ -23,8 +62,8 @@ final class DescriptiveVariableNameFixerTest extends EcsTestCase
         $fixtureDirectory = __DIR__ . '/Fixtures/DescriptiveVariableNameFixer';
 
         $this->assertFixtureIsFixedTo(
-            $fixtureDirectory . '/Before/ClosureScopes.php',
-            $fixtureDirectory . '/After/ClosureScopes.php',
+            inputFixture: $fixtureDirectory . '/Before/ClosureScopes.php',
+            expectedFixture: $fixtureDirectory . '/After/ClosureScopes.php',
         );
     }
 
@@ -33,8 +72,8 @@ final class DescriptiveVariableNameFixerTest extends EcsTestCase
         $fixtureDirectory = __DIR__ . '/Fixtures/DescriptiveVariableNameFixer';
 
         $this->assertFixtureIsFixedTo(
-            $fixtureDirectory . '/Before/TypeInference.php',
-            $fixtureDirectory . '/After/TypeInference.php',
+            inputFixture: $fixtureDirectory . '/Before/TypeInference.php',
+            expectedFixture: $fixtureDirectory . '/After/TypeInference.php',
         );
     }
 

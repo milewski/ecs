@@ -87,6 +87,12 @@ final class DescriptiveVariableNameFixer extends AbstractFixer
         );
     }
 
+    public function getPriority(): int
+    {
+        // Resolve parameter names before calls are wrapped and converted to named arguments.
+        return 50;
+    }
+
     public function isCandidate(Tokens $tokens): bool
     {
         return $tokens->isTokenKindFound(T_VARIABLE)

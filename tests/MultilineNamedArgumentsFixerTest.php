@@ -8,6 +8,68 @@ use DigitalCreative\ECS\Tests\Support\EcsTestCase;
 
 final class MultilineNamedArgumentsFixerTest extends EcsTestCase
 {
+    public function test_newly_expanded_calls_receive_control_block_padding_in_one_pass(): void
+    {
+        $input = <<<'PHP'
+        <?php
+
+        declare(strict_types = 1);
+
+        final class ConditionalCalls
+        {
+            public function send(bool $ready, object $ticket, object $customer): void
+            {
+                if ($ready) {
+                    unknown_function($ticket->recipientDisplayNameForTheTicketNotification, $customer->recipientDisplayNameForTheTicketNotification);
+                }
+            }
+        }
+
+        PHP;
+
+        $expected = <<<'PHP'
+        <?php
+
+        declare(strict_types = 1);
+
+        final class ConditionalCalls
+        {
+            public function send(bool $ready, object $ticket, object $customer): void
+            {
+                if ($ready) {
+
+                    unknown_function(
+                        $ticket->recipientDisplayNameForTheTicketNotification,
+                        $customer->recipientDisplayNameForTheTicketNotification,
+                    );
+
+                }
+            }
+        }
+
+        PHP;
+
+        $this->assertCodeIsFixedTo($input, $expected, 'ConditionalCalls.php');
+        $this->assertCodeIsFixedTo($expected, $expected, 'ConditionalCalls.php');
+    }
+
+    public function test_long_constructor_calls_are_expanded_and_named(): void
+    {
+        $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';
+
+        $this->assertFixtureIsFixedTo(
+            inputFixture: $fixtureDirectory . '/Before/LongCalls.php',
+            expectedFixture: $fixtureDirectory . '/After/LongCalls.php',
+        );
+    }
+
+    public function test_expanded_long_calls_are_idempotent(): void
+    {
+        $this->assertFixturePasses(
+            fixture: __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer/After/LongCalls.php',
+        );
+    }
+
     public function test_multiline_calls_use_resolved_parameter_names(): void
     {
         $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';
