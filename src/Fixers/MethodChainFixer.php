@@ -4,6 +4,8 @@ declare(strict_types = 1);
 
 namespace Milewski\ECS\Fixers;
 
+use Milewski\ECS\TokenAnalyzer\ControlStructureHeaderAnalyzer;
+use Milewski\ECS\TokenAnalyzer\LineLengthAnalyzer;
 use PhpCsFixer\AbstractFixer;
 use PhpCsFixer\Fixer\ConfigurableFixerInterface;
 use PhpCsFixer\Fixer\ConfigurableFixerTrait;
@@ -62,6 +64,16 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
     {
         for ($index = 1; $index < $tokens->count(); $index++) {
 
+            $headerEnd = ControlStructureHeaderAnalyzer::findEnd($tokens, $index);
+
+            if ($headerEnd !== null) {
+
+                $index = $headerEnd;
+
+                continue;
+
+            }
+
             if ($tokens[ $index ]->isObjectOperator() === false
                 || $this->methodParentheses($tokens, $index) === null
                 || $this->continuesMethodChain($tokens, $index)) {
@@ -85,16 +97,14 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
             }
 
-            if (count($operators) < 2) {
+            if (count($operators) < 2 || $this->hasInlineLinks($tokens, $operators) === false) {
                 continue;
             }
 
             $receiverStart = $this->receiverStart($tokens, $index);
             $indentation = $this->getLineIndentation($tokens, $receiverStart);
-            $lines = preg_split('/\R/', $tokens->generatePartialCode($receiverStart, $closeParenthesis));
-            $lines[ 0 ] = $indentation . $lines[ 0 ];
 
-            if (max(array_map(strlen(...), $lines)) <= $this->configuration[ 'max_line_length' ]) {
+            if ($this->lineLength($tokens, $receiverStart, $closeParenthesis, $indentation) <= $this->configuration[ 'max_line_length' ]) {
                 continue;
             }
 
@@ -107,6 +117,71 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
             }
 
         }
+    }
+
+    /**
+     * @param list<int> $operators
+     */
+    private function hasInlineLinks(Tokens $tokens, array $operators): bool
+    {
+        foreach (array_slice($operators, 1) as $operator) {
+
+            $previous = $tokens->getPrevMeaningfulToken($operator);
+
+            if ($tokens->isPartialCodeMultiline($previous, $operator) === false) {
+                return true;
+            }
+
+        }
+
+        return false;
+    }
+
+    private function lineLength(Tokens $tokens, int $start, int $end, string $indentation): int
+    {
+        for ($index = $start - 1; $index >= 0; $index--) {
+
+            if (preg_match('/\R/', $tokens[ $index ]->getContent()) === 1 || $tokens[ $index ]->equalsAny([ ';', '{' ])) {
+                break;
+            }
+
+            $block = Tokens::detectBlockType($tokens[ $index ]);
+
+            if ($block !== null && $block[ 'isStart' ] === false) {
+
+                $open = $tokens->findBlockStart($block[ 'type' ], $index);
+
+                if ($tokens->isPartialCodeMultiline($open, $index)) {
+                    break;
+                }
+
+                $index = $open;
+
+                continue;
+
+            }
+
+            if ($tokens[ $index ]->equals('(') === false) {
+                continue;
+            }
+
+            $previous = $tokens->getPrevMeaningfulToken($index);
+
+            if ($previous !== null && ($tokens[ $previous ]->isGivenKind([
+                T_STRING, T_VARIABLE, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE,
+            ]) || $tokens[ $previous ]->equalsAny([ ')', ']' ]))) {
+
+                // The enclosing call can wrap its arguments without expanding this short nested chain.
+                $lines = preg_split('/\R/', $tokens->generatePartialCode($start, $end));
+                $lines[ 0 ] = $indentation . $lines[ 0 ];
+
+                return max(array_map(strlen(...), $lines));
+
+            }
+
+        }
+
+        return LineLengthAnalyzer::maximumLength($tokens, $start, $end);
     }
 
     private function methodParentheses(Tokens $tokens, int $operator): ?int

@@ -5,14 +5,14 @@ declare(strict_types = 1);
 namespace Milewski\ECS\Tests\Rules;
 
 use Milewski\ECS\Fixers\MethodChainFixer;
+use Milewski\ECS\Tests\Support\FixerTestCase;
 use PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException;
 use PhpCsFixer\Tokenizer\Tokens;
 use PhpCsFixer\WhitespacesFixerConfig;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\TestCase;
 use SplFileInfo;
 
-final class MethodChainFixerTest extends TestCase
+final class MethodChainFixerTest extends FixerTestCase
 {
     #[DataProvider('provideChains')]
     public function test_long_method_chains(string $input, string $expected): void
@@ -67,6 +67,18 @@ final class MethodChainFixerTest extends TestCase
                 '$repository->findMatchingRecords($criteria)->first()->value',
                 '$repository' . "\n    " . '->findMatchingRecords($criteria)' . "\n    " . '->first()->value',
             ],
+            'assignment prefix exceeds the limit' => [
+                '$membershipWithALongName = $query->first()->last()',
+                '$membershipWithALongName = $query' . "\n    " . '->first()' . "\n    " . '->last()',
+            ],
+            'coalescing suffix exceeds the limit' => [
+                '$query->first()->last() ?? new MembershipFallbackWithALongName()',
+                '$query' . "\n    " . '->first()' . "\n    " . '->last() ?? new MembershipFallbackWithALongName()',
+            ],
+            'prefix and suffix exceed the limit' => [
+                '$membership = $query->first()->last() ?? new Membership()',
+                '$membership = $query' . "\n    " . '->first()' . "\n    " . '->last() ?? new Membership()',
+            ],
         ];
     }
 
@@ -85,15 +97,15 @@ final class MethodChainFixerTest extends TestCase
 
     public function test_default_chain_length_boundary(): void
     {
-        $base = '$repository->first(\'\')->last()';
-        $atLimit = '$repository->first(\'' . str_repeat('x', 120 - strlen($base)) . '\')->last()';
-        $aboveLimit = '$repository->first(\'' . str_repeat('x', 121 - strlen($base)) . '\')->last()';
-        $input = "<?php\n" . $atLimit . ";\n";
+        $base = '$repository->first(\'\')->last();';
+        $atLimit = '$repository->first(\'' . str_repeat('x', 120 - strlen($base)) . '\')->last();';
+        $aboveLimit = '$repository->first(\'' . str_repeat('x', 121 - strlen($base)) . '\')->last();';
+        $input = "<?php\n" . $atLimit . "\n";
 
         $this->assertSame($input, $this->fix($input));
         $this->assertSame(
-            expected: "<?php\n" . str_replace('->', "\n    ->", $aboveLimit) . ";\n",
-            actual: $this->fix("<?php\n" . $aboveLimit . ";\n"),
+            expected: "<?php\n" . str_replace('->', "\n    ->", $aboveLimit) . "\n",
+            actual: $this->fix("<?php\n" . $aboveLimit . "\n"),
         );
     }
 

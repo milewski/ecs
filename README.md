@@ -47,7 +47,9 @@ return register_fixers([
 
 ## Long calls and method chains
 
-The default preset wraps calls with two or more arguments when their line exceeds 120 characters. Each argument goes on its own line, and parameter names are added when they can be resolved safely. Long chains with at least two method calls also put each method on its own line. Short calls, short chains, and compact argument groups in existing multiline calls are preserved.
+The default preset wraps calls with two or more arguments when their line exceeds 140 characters. Each argument goes on its own line, and parameter names are added when they can be resolved safely. Chains with at least two method calls wrap at 120 characters, putting each method on its own line. Short calls, short chains, and compact argument groups in existing multiline calls are preserved.
+
+Control structure headers, including `if`, `elseif`, and loop conditions, are excluded from automatic wrapping. Chains count the whole line, including assignments and trailing expressions such as `?? new Model()`, and wrap before their argument lists are considered.
 
 Both rules accept a positive integer `max_line_length` option. To change the wrapping threshold in your `ecs.php` configuration:
 
@@ -58,7 +60,7 @@ use Milewski\ECS\ValueObject\SetList;
 
 return register_fixers([
     MethodChainFixer::class => [ 'max_line_length' => 120 ],
-    MultilineNamedArgumentsFixer::class => [ 'max_line_length' => 120 ],
+    MultilineNamedArgumentsFixer::class => [ 'max_line_length' => 140 ],
 ])->withSets([ SetList::MILEWSKI ]);
 ```
 

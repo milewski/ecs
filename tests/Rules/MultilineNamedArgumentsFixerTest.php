@@ -5,14 +5,14 @@ declare(strict_types = 1);
 namespace Milewski\ECS\Tests\Rules;
 
 use Milewski\ECS\Fixers\MultilineNamedArgumentsFixer;
+use Milewski\ECS\Tests\Support\FixerTestCase;
 use PhpCsFixer\ConfigurationException\InvalidFixerConfigurationException;
 use PhpCsFixer\Tokenizer\Tokens;
 use PhpCsFixer\WhitespacesFixerConfig;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\TestCase;
 use SplFileInfo;
 
-final class MultilineNamedArgumentsFixerTest extends TestCase
+final class MultilineNamedArgumentsFixerTest extends FixerTestCase
 {
     #[DataProvider('provideCalls')]
     public function test_various_long_call_forms(string $input, string $expected): void
@@ -69,14 +69,14 @@ final class MultilineNamedArgumentsFixerTest extends TestCase
 
     public function test_calls_at_the_default_limit_stay_on_one_line(): void
     {
-        $input = $this->callWithLineLength(120);
+        $input = $this->callWithLineLength(140);
 
         $this->assertSame($input, $this->fix($input));
     }
 
     public function test_calls_above_the_default_limit_expand_without_guessing_names(): void
     {
-        $input = $this->callWithLineLength(121);
+        $input = $this->callWithLineLength(141);
         $expected = str_replace([ '(', ', ', ');' ], [ "(\n    ", ",\n    ", "\n);" ], $input);
 
         $this->assertSame($expected, $this->fix($input));
@@ -92,9 +92,16 @@ final class MultilineNamedArgumentsFixerTest extends TestCase
 
     public function test_a_higher_configured_limit_preserves_a_longer_call(): void
     {
+        $input = $this->callWithLineLength(150);
+
+        $this->assertSame($input, $this->fix($input, 160));
+    }
+
+    public function test_calls_between_120_and_140_characters_remain_inline(): void
+    {
         $input = $this->callWithLineLength(130);
 
-        $this->assertSame($input, $this->fix($input, 140));
+        $this->assertSame($input, $this->fix($input));
     }
 
     public function test_single_argument_callbacks_and_indivisible_values_are_preserved(): void
@@ -229,7 +236,7 @@ final class MultilineNamedArgumentsFixerTest extends TestCase
         return sprintf("<?php\nunknown_call('%s', 'value');\n", str_repeat('x', $length - strlen($call)));
     }
 
-    private function fix(string $input, int $maxLineLength = 120, ?WhitespacesFixerConfig $whitespaces = null): string
+    private function fix(string $input, int $maxLineLength = 140, ?WhitespacesFixerConfig $whitespaces = null): string
     {
         $tokens = Tokens::fromCode($input);
         $fixer = new MultilineNamedArgumentsFixer();

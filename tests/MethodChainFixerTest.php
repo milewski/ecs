@@ -33,4 +33,17 @@ final class MethodChainFixerTest extends EcsTestCase
     {
         $this->assertFixturePasses(__DIR__ . '/Fixtures/MethodChainFixer/After/RolePolicies.php');
     }
+
+    public function test_conditions_are_preserved_and_membership_chains_wrap_before_arguments(): void
+    {
+        $this->assertFixtureIsFixedTo(
+            inputFixture: __DIR__ . '/Fixtures/MethodChainFixer/Before/InlineConditions.php',
+            expectedFixture: __DIR__ . '/Fixtures/MethodChainFixer/After/InlineConditions.php',
+        );
+    }
+
+    public function test_condition_and_membership_output_is_idempotent(): void
+    {
+        $this->assertFixturePasses(__DIR__ . '/Fixtures/MethodChainFixer/After/InlineConditions.php');
+    }
 }

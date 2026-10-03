@@ -4,6 +4,8 @@ declare(strict_types = 1);
 
 namespace Milewski\ECS\Fixers;
 
+use Milewski\ECS\TokenAnalyzer\ControlStructureHeaderAnalyzer;
+use Milewski\ECS\TokenAnalyzer\LineLengthAnalyzer;
 use PhpCsFixer\AbstractFixer;
 use PhpCsFixer\Fixer\ConfigurableFixerInterface;
 use PhpCsFixer\Fixer\ConfigurableFixerTrait;
@@ -114,7 +116,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             new FixerOptionBuilder('max_line_length', 'Expand call argument lists on lines longer than this limit.')
                 ->setAllowedTypes([ 'int' ])
                 ->setAllowedValues([ static fn (int $length): bool => $length > 0 ])
-                ->setDefault(120)
+                ->setDefault(140)
                 ->getOption(),
         ]);
     }
@@ -136,6 +138,16 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         for ($index = 1; $index < $tokens->count(); $index++) {
 
+            $headerEnd = ControlStructureHeaderAnalyzer::findEnd($tokens, $index);
+
+            if ($headerEnd !== null) {
+
+                $index = $headerEnd;
+
+                continue;
+
+            }
+
             if ($tokens[ $index ]->equals('(') === false || $this->isCallArgumentList($tokens, $index) === false) {
                 continue;
             }
@@ -144,7 +156,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
             if ($firstToken === null
                 || $tokens->isPartialCodeMultiline($index, $firstToken - 1)
-                || $this->lineLength($tokens, $index) <= $this->configuration[ 'max_line_length' ]) {
+                || LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ]) {
                 continue;
             }
 
@@ -206,35 +218,6 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         return $beforeName === null || $tokens[ $beforeName ]->isGivenKind([
             T_FUNCTION, T_FN, CT::T_RETURN_REF, T_ATTRIBUTE,
         ]) === false;
-    }
-
-    private function lineLength(Tokens $tokens, int $index): int
-    {
-        $length = 0;
-
-        for ($cursor = $index - 1; $cursor >= 0; $cursor--) {
-
-            $lines = preg_split('/\R/', $tokens[ $cursor ]->getContent());
-            $length += strlen($lines[ count($lines) - 1 ]);
-
-            if (count($lines) > 1) {
-                break;
-            }
-
-        }
-
-        for ($cursor = $index; $cursor < $tokens->count(); $cursor++) {
-
-            $lines = preg_split('/\R/', $tokens[ $cursor ]->getContent());
-            $length += strlen($lines[ 0 ]);
-
-            if (count($lines) > 1) {
-                break;
-            }
-
-        }
-
-        return $length;
     }
 
     private function nameExpandedArguments(Tokens $tokens): void
