@@ -47,7 +47,9 @@ return register_fixers([
 
 ## Long calls and method chains
 
-The default preset wraps calls with two or more arguments when their line exceeds 140 characters. Each argument goes on its own line, and parameter names are added when they can be resolved safely. Chains with at least two method calls wrap at 120 characters, putting each method on its own line. Short calls, short chains, and compact argument groups in existing multiline calls are preserved.
+The default preset wraps calls with two or more arguments when their line exceeds 140 characters. Each argument goes on its own line, and parameter names are added when they can be resolved safely. Existing lists with line breaks before arguments or the closing parenthesis also place each argument on a separate line, even below the length limit. Chains with at least two method calls wrap at 120 characters, putting each method on its own line. Short calls and short chains are preserved.
+
+Multiline arrays place each element on its own line, including arrays containing multiline constructor calls. Inline arrays keep their compact layout. A call with inline arguments and a multiline nested value, such as `save($id, new SnapshotData(...))`, keeps its outer layout unless it exceeds the call wrapping limit.
 
 Control structure headers, including `if`, `elseif`, and loop conditions, are excluded from automatic wrapping. Calls and chains within boolean and comparison expressions also stay inline, regardless of length. Standalone chains count the whole line, including assignments and trailing expressions such as `?? new Model()`. Nested chains count their own expression, allowing a long constructor call to expand its arguments while keeping a short chain compact.
 

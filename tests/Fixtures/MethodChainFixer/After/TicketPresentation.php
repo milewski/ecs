@@ -22,9 +22,13 @@ final class TicketPresentation
     private function present(Ticket $ticket): TicketData
     {
         return new TicketData(
-            id: $ticket->id, customerId: $ticket->lead_id,
+            id: $ticket->id,
+            customerId: $ticket->lead_id,
             from: $this->leadRepository->find($ticket->lead_id)?->email,
-            subject: $ticket->subject, category: $ticket->category, priority: $ticket->priority, status: $ticket->status,
+            subject: $ticket->subject,
+            category: $ticket->category,
+            priority: $ticket->priority,
+            status: $ticket->status,
             assignee: $ticket->assignee_name,
             messages: $this->ticketMessageRepository
                 ->forTicket($ticket->id)
@@ -36,7 +40,8 @@ final class TicketPresentation
                     text: $message->text,
                 ))
                 ->all(),
-            updatedAt: $ticket->updated_at->toISOString(), archived: $ticket->isArchived(),
+            updatedAt: $ticket->updated_at->toISOString(),
+            archived: $ticket->isArchived(),
         );
     }
 }

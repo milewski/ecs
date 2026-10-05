@@ -14,6 +14,136 @@ use SplFileInfo;
 
 final class MultilineNamedArgumentsFixerTest extends FixerTestCase
 {
+    #[DataProvider('provideExpandedCalls')]
+    public function test_expanded_calls_place_each_top_level_argument_on_its_own_line(string $callable): void
+    {
+        $input = "<?php\n" . $callable . "(\n    first: 1, second: 2,\n    third: 3, fourth: 4);\n";
+        $expected = "<?php\n" . $callable . "(\n    first: 1,\n    second: 2,\n    third: 3,\n    fourth: 4\n);\n";
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public static function provideExpandedCalls(): array
+    {
+        return [
+            'constructor' => [ 'new UnknownData' ],
+            'function' => [ 'unknown_function' ],
+            'static method' => [ 'UnknownFactory::make' ],
+            'instance method' => [ '$service->make' ],
+            'nullsafe method' => [ '$service?->make' ],
+            'variable callable' => [ '$factory' ],
+            'array callable' => [ '$callbacks[\'make\']' ],
+        ];
+    }
+
+    public function test_grouped_positional_arguments_keep_their_binding_when_names_are_resolved(): void
+    {
+        $declaration = "<?php\nfunction combine(string \$first, string \$second, string \$third): void {}\n";
+        $input = $declaration . "combine(\n    'one', 'two', third: 'three',\n);\n";
+        $expected = $declaration . "combine(\n    first: 'one',\n    second: 'two',\n    third: 'three',\n);\n";
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public function test_normalizing_grouped_arguments_preserves_nested_expressions_and_comments(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        unknown_call(
+            'commas, parentheses ()', [ 1, 2 ], // Keep the array explanation.
+            /* Callback description. */ static fn ($first, $second) => [$first, $second], value: nested(1, 2),
+        );
+        PHP;
+
+        $expected = <<<'PHP'
+        <?php
+        unknown_call(
+            'commas, parentheses ()',
+            [ 1, 2 ], // Keep the array explanation.
+            /* Callback description. */ static fn ($first, $second) => [$first, $second],
+            value: nested(1, 2),
+        );
+        PHP;
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public function test_unknown_variadic_and_unpacked_grouped_calls_keep_positional_arguments(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        function collect_values(string ...$values): array { return $values; }
+        collect_values(
+            'one', 'two',
+        );
+        unknown_call(
+            $first, ...$remaining,
+        );
+        PHP;
+
+        $expected = <<<'PHP'
+        <?php
+        function collect_values(string ...$values): array { return $values; }
+        collect_values(
+            'one',
+            'two',
+        );
+        unknown_call(
+            $first,
+            ...$remaining,
+        );
+        PHP;
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public function test_grouped_arguments_respect_tabs_and_crlf(): void
+    {
+        $input = "<?php\r\n\tunknown_call(\r\n\t\tfirst: 1, second: 2,\r\n\t);\r\n";
+        $expected = "<?php\r\n\tunknown_call(\r\n\t\tfirst: 1,\r\n\t\tsecond: 2,\r\n\t);\r\n";
+        $whitespaces = new WhitespacesFixerConfig("\t", "\r\n");
+
+        $this->assertSame($expected, $this->fix($input, 140, $whitespaces));
+        $this->assertSame($expected, $this->fix($expected, 140, $whitespaces));
+    }
+
+    #[DataProvider('providePartialArgumentLayouts')]
+    public function test_partially_expanded_argument_lists_are_completed(string $input, bool $hasComment = false): void
+    {
+        $expected = "<?php\nunknown_call(\n    first: 1,\n    second: 2,\n    third: 3\n);";
+
+        if ($hasComment) {
+            $expected = str_replace('    first:', "    /* Values */\n    first:", $expected);
+        }
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public static function providePartialArgumentLayouts(): array
+    {
+        return [
+            'inline first argument' => [ "<?php\nunknown_call(first: 1,\n    second: 2, third: 3);" ],
+            'only closing parenthesis is on a new line' => [ "<?php\nunknown_call(first: 1, second: 2, third: 3\n);" ],
+            'leading comment before expanded first argument' => [ "<?php\nunknown_call(/* Values */\n    first: 1, second: 2, third: 3);", true ],
+        ];
+    }
+
+    public function test_literal_newlines_do_not_expand_an_otherwise_inline_argument_list(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        unknown_call('first line
+        second line');
+        PHP;
+
+        $this->assertSame($input, $this->fix($input));
+    }
+
     #[DataProvider('provideCalls')]
     public function test_various_long_call_forms(string $input, string $expected): void
     {

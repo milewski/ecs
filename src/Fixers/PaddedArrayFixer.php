@@ -5,24 +5,33 @@ declare(strict_types = 1);
 namespace Milewski\ECS\Fixers;
 
 use PhpCsFixer\AbstractFixer;
+use PhpCsFixer\Fixer\IndentationTrait;
+use PhpCsFixer\Fixer\WhitespacesAwareFixerInterface;
 use PhpCsFixer\FixerDefinition\CodeSample;
 use PhpCsFixer\FixerDefinition\FixerDefinition;
 use PhpCsFixer\FixerDefinition\FixerDefinitionInterface;
 use PhpCsFixer\Tokenizer\CT;
-use PhpCsFixer\Tokenizer\Token;
 use PhpCsFixer\Tokenizer\Tokens;
 use SplFileInfo;
 
-final class PaddedArrayFixer extends AbstractFixer
+final class PaddedArrayFixer extends AbstractFixer implements WhitespacesAwareFixerInterface
 {
+    use IndentationTrait;
+
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            'Arrays should always have a space between start and ending brackets.',
-            [
+            summary: 'Inline arrays have spaces inside their brackets. Multiline arrays place each element on its own line.',
+            codeSamples: [
                 new CodeSample("<?php\n\$sample = [ 1,2,3 ];"),
             ],
         );
+    }
+
+    public function getPriority(): int
+    {
+        // Expand after calls are wrapped, before array indentation and trailing commas.
+        return 30;
     }
 
     public function isCandidate(Tokens $tokens): bool
@@ -32,7 +41,7 @@ final class PaddedArrayFixer extends AbstractFixer
 
     protected function applyFix(SplFileInfo $file, Tokens $tokens): void
     {
-        for ($index = 0, $c = $tokens->count(); $index < $c; $index++) {
+        for ($index = 0; $index < $tokens->count(); $index++) {
 
             if ($tokens[ $index ]->equals('[')) {
                 $this->fixVariable($tokens, $index);
@@ -47,21 +56,23 @@ final class PaddedArrayFixer extends AbstractFixer
 
     private function fixArray(Tokens $tokens, int $openingBracketIndex): void
     {
-        /**
-         * @var Token $openingBracket
-         * @var Token $closingBracket
-         */
-        $openingBracket = $tokens[ $openingBracketIndex ];
         $closingBracketIndex = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_ARRAY_SQUARE_BRACE, $openingBracketIndex);
-        $closingBracket = $tokens[ $closingBracketIndex ];
-        $nextMeaningFulTokenIndex = $tokens->getNextMeaningfulToken($openingBracketIndex);
+        $nextMeaningfulTokenIndex = $tokens->getNextMeaningfulToken($openingBracketIndex);
 
         /**
          * [    ] => []
          */
-        if ($closingBracketIndex === $nextMeaningFulTokenIndex) {
+        if ($closingBracketIndex === $tokens->getNextNonWhitespace($openingBracketIndex)) {
 
             $tokens->clearRange($openingBracketIndex + 1, $closingBracketIndex - 1);
+
+            return;
+
+        }
+
+        if ($tokens->isPartialCodeMultiline($openingBracketIndex, $closingBracketIndex)) {
+
+            $this->expandArray($tokens, $openingBracketIndex, $closingBracketIndex);
 
             return;
 
@@ -70,9 +81,9 @@ final class PaddedArrayFixer extends AbstractFixer
         /**
          * [1,2,3] => [ 1,2,3]
          */
-        if ($nextMeaningFulTokenIndex - $openingBracketIndex === 1) {
+        if ($nextMeaningfulTokenIndex - $openingBracketIndex === 1) {
 
-            $tokens->ensureWhitespaceAtIndex($nextMeaningFulTokenIndex, 0, ' ');
+            $tokens->ensureWhitespaceAtIndex($nextMeaningfulTokenIndex, 0, ' ');
 
             $closingBracketIndex++;
 
@@ -81,10 +92,53 @@ final class PaddedArrayFixer extends AbstractFixer
         /**
          * [1,2,3] => [1,2,3 ]
          */
-        $previousMeaningFulTokenIndex = $tokens->getPrevMeaningfulToken($closingBracketIndex);
+        $previousMeaningfulTokenIndex = $tokens->getPrevMeaningfulToken($closingBracketIndex);
 
-        if ($closingBracketIndex - $previousMeaningFulTokenIndex === 1) {
-            $tokens->ensureWhitespaceAtIndex($previousMeaningFulTokenIndex, 1, ' ');
+        if ($closingBracketIndex - $previousMeaningfulTokenIndex === 1) {
+            $tokens->ensureWhitespaceAtIndex($previousMeaningfulTokenIndex, 1, ' ');
+        }
+    }
+
+    private function expandArray(Tokens $tokens, int $openingBracketIndex, int $closingBracketIndex): void
+    {
+        $indentation = $this->getLineIndentation($tokens, $openingBracketIndex);
+        $lineEnding = $this->whitespacesConfig->getLineEnding();
+        $elementWhitespace = $lineEnding . $indentation . $this->whitespacesConfig->getIndent();
+        $separators = [ $openingBracketIndex ];
+
+        for ($index = $openingBracketIndex + 1; $index < $closingBracketIndex; $index++) {
+
+            $block = Tokens::detectBlockType($tokens[ $index ]);
+
+            if ($block !== null && $block[ 'isStart' ]) {
+
+                $index = $tokens->findBlockEnd($block[ 'type' ], $index);
+
+                continue;
+
+            }
+
+            if ($tokens[ $index ]->equals(',') && $tokens->getNextMeaningfulToken($index) !== $closingBracketIndex) {
+                $separators[] = $index;
+            }
+
+        }
+
+        $tokens->ensureWhitespaceAtIndex($closingBracketIndex - 1, 1, $lineEnding . $indentation);
+
+        for ($index = count($separators) - 1; $index >= 0; $index--) {
+
+            $separator = $separators[ $index ];
+            $first = $tokens->getNextNonWhitespace($separator);
+
+            if ($separator !== $openingBracketIndex && $tokens[ $first ]->isComment()
+                && str_starts_with($tokens[ $first ]->getContent(), '/*') === false
+                && $tokens->isPartialCodeMultiline($separator, $first) === false) {
+                $first = $tokens->getNextNonWhitespace($first);
+            }
+
+            $tokens->ensureWhitespaceAtIndex($first - 1, 1, $elementWhitespace);
+
         }
     }
 

@@ -94,7 +94,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Long calls are expanded onto multiple lines. Expanded calls with at least two arguments use named arguments when parameter names can be resolved safely.',
+            summary: 'Long calls are expanded onto multiple lines. Expanded calls place each argument on its own line and use named arguments when parameter names can be resolved safely.',
             codeSamples: [
                 new CodeSample("<?php\n\njson_decode(\n    \$json,\n    true,\n    flags: JSON_THROW_ON_ERROR,\n);\n"),
             ],
@@ -284,20 +284,20 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
                 continue;
             }
 
-            $firstToken = $tokens->getNextNonWhitespace($index);
+            $closeParenthesis = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $index);
+            $arguments = $this->argumentRanges($tokens, $index, $closeParenthesis);
 
-            if ($firstToken === null || $tokens->isPartialCodeMultiline($index, $firstToken - 1)) {
+            if ($arguments === []) {
                 continue;
             }
 
-            $closeParenthesis = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $index);
-            $arguments = $this->argumentRanges($tokens, $index, $closeParenthesis);
+            $isExpanded = $this->hasArgumentLineBreak($tokens, $closeParenthesis, $arguments);
             $hasSprintfArgument = $this->hasSprintfArgument($tokens, $arguments);
             $hasBrokenChain = $this->hasBrokenChainArgument($tokens, $arguments);
 
-            if ((count($arguments) < 2 && $hasSprintfArgument === false)
+            if ($isExpanded === false && ((count($arguments) < 2 && $hasSprintfArgument === false)
                 || ($hasSprintfArgument === false && $hasBrokenChain === false
-                    && LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ])) {
+                    && LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ]))) {
                 continue;
             }
 
@@ -305,17 +305,63 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             $lineEnding = $this->whitespacesConfig->getLineEnding();
             $argumentIndentation = $lineEnding . $indentation . $this->whitespacesConfig->getIndent();
 
-            $tokens->ensureWhitespaceAtIndex($closeParenthesis - 1, 1, $lineEnding . $indentation);
+            $changed = $this->ensureWhitespaceBefore($tokens, $closeParenthesis, $lineEnding . $indentation) || $changed;
 
             for ($argumentIndex = count($arguments) - 1; $argumentIndex >= 0; $argumentIndex--) {
-                $tokens->ensureWhitespaceAtIndex($arguments[ $argumentIndex ][ 'start' ], 0, $argumentIndentation);
-            }
 
-            $changed = true;
+                $start = $arguments[ $argumentIndex ][ 'start' ];
+                $first = $tokens->getNextNonWhitespace($start - 1);
+
+                if ($argumentIndex > 0 && $tokens[ $first ]->isComment()
+                    && str_starts_with($tokens[ $first ]->getContent(), '/*') === false
+                    && $tokens->isPartialCodeMultiline($start - 1, $first) === false) {
+                    $first = $tokens->getNextNonWhitespace($first);
+                }
+
+                $changed = $this->ensureWhitespaceBefore($tokens, $first, $argumentIndentation) || $changed;
+
+            }
 
         }
 
         return $changed;
+    }
+
+    private function ensureWhitespaceBefore(Tokens $tokens, int $index, string $whitespace): bool
+    {
+        if ($tokens[ $index - 1 ]->isWhitespace()) {
+
+            if ($tokens[ $index - 1 ]->getContent() === $whitespace) {
+                return false;
+            }
+
+            $tokens[ $index - 1 ] = new Token([ T_WHITESPACE, $whitespace ]);
+
+        } else {
+
+            $tokens->insertAt($index, new Token([ T_WHITESPACE, $whitespace ]));
+
+        }
+
+        return true;
+    }
+
+    /**
+     * @param list<array{start: int, end: int}> $arguments
+     */
+    private function hasArgumentLineBreak(Tokens $tokens, int $closeParenthesis, array $arguments): bool
+    {
+        foreach ($arguments as $argument) {
+
+            $first = $tokens->getNextMeaningfulToken($argument[ 'start' ] - 1);
+
+            if ($tokens->isPartialCodeMultiline($argument[ 'start' ] - 1, $first - 1)) {
+                return true;
+            }
+
+        }
+
+        return $tokens->isPartialCodeMultiline($tokens->getPrevMeaningfulToken($closeParenthesis) + 1, $closeParenthesis - 1);
     }
 
     /**
@@ -518,13 +564,15 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         if ($namespaceIndexes === []) {
 
-            return [ [
-                'start' => 0,
-                'end' => $tokens->count() - 1,
-                'name' => '',
-                'classImports' => [],
-                'functionImports' => [],
-            ] ];
+            return [
+                [
+                    'start' => 0,
+                    'end' => $tokens->count() - 1,
+                    'name' => '',
+                    'classImports' => [],
+                    'functionImports' => [],
+                ],
+            ];
 
         }
 
