@@ -14,6 +14,90 @@ use SplFileInfo;
 
 final class MethodChainFixerTest extends FixerTestCase
 {
+    #[DataProvider('provideReceiverLayouts')]
+    public function test_previously_wrapped_chains_join_the_first_call_to_the_receiver(string $receiver): void
+    {
+        $input = "<?php\n" . $receiver . "\n    ->first()\n    ->second();";
+        $expected = "<?php\n" . $receiver . "->first()\n    ->second();";
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public static function provideReceiverLayouts(): array
+    {
+        return [
+            'this' => [ '$this' ],
+            'local variable' => [ '$repository' ],
+            'property' => [ '$this->repository' ],
+            'nested property' => [ '$this->services->repository' ],
+            'array element' => [ '$repositories[\'primary\']' ],
+            'array index containing a call' => [ '$repositories[key()]' ],
+            'grouped variable' => [ '($repository)' ],
+        ];
+    }
+
+    public function test_an_existing_nullsafe_chain_keeps_its_first_call_inline(): void
+    {
+        $input = "<?php\n\$repository\n    ?->find(\$id)\n    ?->all();";
+        $expected = "<?php\n\$repository?->find(\$id)\n    ?->all();";
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public function test_comments_between_the_receiver_and_first_method_are_preserved(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        $repository
+            // Explain the lookup.
+            ->find($id)
+            ->all();
+        $repository /* lookup */
+            ->find($id)
+            ->all();
+        PHP;
+
+        $this->assertSame($input, $this->fix($input));
+        $this->assertSame($input, $this->fix($input, 20));
+    }
+
+    public function test_first_calls_with_multiline_arguments_keep_the_receiver_inline(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        $repository
+            ->find(
+                first: $first,
+                second: $second,
+            )
+            ->all();
+        PHP;
+
+        $expected = <<<'PHP'
+        <?php
+        $repository->find(
+                first: $first,
+                second: $second,
+            )
+            ->all();
+        PHP;
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public function test_existing_chains_are_repaired_with_tabs_and_crlf(): void
+    {
+        $input = "<?php\r\n\t\$repository\r\n\t\t->find(\$id)\r\n\t\t->all();\r\n";
+        $expected = "<?php\r\n\t\$repository->find(\$id)\r\n\t\t->all();\r\n";
+        $whitespaces = new WhitespacesFixerConfig("\t", "\r\n");
+
+        $this->assertSame($expected, $this->fix($input, 120, $whitespaces));
+        $this->assertSame($expected, $this->fix($expected, 120, $whitespaces));
+    }
+
     #[DataProvider('provideChains')]
     public function test_long_method_chains(string $input, string $expected): void
     {
@@ -29,15 +113,19 @@ final class MethodChainFixerTest extends FixerTestCase
         return [
             'object property receiver' => [
                 '$this->repository->findMatchingRecords($criteria)->map($callback)->all()',
-                '$this->repository' . "\n    " . '->findMatchingRecords($criteria)' . "\n    " . '->map($callback)' . "\n    " . '->all()',
+                '$this->repository->findMatchingRecords($criteria)' . "\n    " . '->map($callback)' . "\n    " . '->all()',
             ],
             'nullsafe calls' => [
                 '$repository?->findMatchingRecords($criteria)?->map($callback)?->all()',
-                '$repository' . "\n    " . '?->findMatchingRecords($criteria)' . "\n    " . '?->map($callback)' . "\n    " . '?->all()',
+                '$repository?->findMatchingRecords($criteria)' . "\n    " . '?->map($callback)' . "\n    " . '?->all()',
             ],
             'static factory receiver' => [
                 'Repository::query()->findMatchingRecords($criteria)->all()',
                 'Repository::query()' . "\n    " . '->findMatchingRecords($criteria)' . "\n    " . '->all()',
+            ],
+            'function factory receiver' => [
+                'repository_factory()->findMatchingRecords($criteria)->all()',
+                'repository_factory()' . "\n    " . '->findMatchingRecords($criteria)' . "\n    " . '->all()',
             ],
             'grouped receiver' => [
                 '(Repository::query())->findMatchingRecords($criteria)->all()',
@@ -49,35 +137,35 @@ final class MethodChainFixerTest extends FixerTestCase
             ],
             'array element receiver' => [
                 '$repositories[\'primary\']->findMatchingRecords($criteria)->all()',
-                '$repositories[\'primary\']' . "\n    " . '->findMatchingRecords($criteria)' . "\n    " . '->all()',
+                '$repositories[\'primary\']->findMatchingRecords($criteria)' . "\n    " . '->all()',
             ],
             'dynamic method name' => [
                 '$repository->$methodWithALongName($criteria)->all()',
-                '$repository' . "\n    " . '->$methodWithALongName($criteria)' . "\n    " . '->all()',
+                '$repository->$methodWithALongName($criteria)' . "\n    " . '->all()',
             ],
             'nested short chain in callback' => [
                 '$repository->map(fn ($value) => $value->first()->second())->all()',
-                '$repository' . "\n    " . '->map(fn ($value) => $value->first()->second())' . "\n    " . '->all()',
+                '$repository->map(fn ($value) => $value->first()->second())' . "\n    " . '->all()',
             ],
             'comments between calls' => [
                 '$repository->first($criteria) /* explain */ ->second()',
-                '$repository' . "\n    " . '->first($criteria) /* explain */' . "\n    " . '->second()',
+                '$repository->first($criteria) /* explain */' . "\n    " . '->second()',
             ],
             'property after final call' => [
                 '$repository->findMatchingRecords($criteria)->first()->value',
-                '$repository' . "\n    " . '->findMatchingRecords($criteria)' . "\n    " . '->first()->value',
+                '$repository->findMatchingRecords($criteria)' . "\n    " . '->first()->value',
             ],
             'assignment prefix exceeds the limit' => [
                 '$membershipWithALongName = $query->first()->last()',
-                '$membershipWithALongName = $query' . "\n    " . '->first()' . "\n    " . '->last()',
+                '$membershipWithALongName = $query->first()' . "\n    " . '->last()',
             ],
             'coalescing suffix exceeds the limit' => [
                 '$query->first()->last() ?? new MembershipFallbackWithALongName()',
-                '$query' . "\n    " . '->first()' . "\n    " . '->last() ?? new MembershipFallbackWithALongName()',
+                '$query->first()' . "\n    " . '->last() ?? new MembershipFallbackWithALongName()',
             ],
             'prefix and suffix exceed the limit' => [
                 '$membership = $query->first()->last() ?? new Membership()',
-                '$membership = $query' . "\n    " . '->first()' . "\n    " . '->last() ?? new Membership()',
+                '$membership = $query->first()' . "\n    " . '->last() ?? new Membership()',
             ],
         ];
     }
@@ -104,7 +192,7 @@ final class MethodChainFixerTest extends FixerTestCase
 
         $this->assertSame($input, $this->fix($input));
         $this->assertSame(
-            expected: "<?php\n" . str_replace('->', "\n    ->", $aboveLimit) . "\n",
+            expected: "<?php\n" . str_replace('->last()', "\n    ->last()", $aboveLimit) . "\n",
             actual: $this->fix("<?php\n" . $aboveLimit . "\n"),
         );
     }
@@ -112,7 +200,7 @@ final class MethodChainFixerTest extends FixerTestCase
     public function test_chain_wrapping_respects_indentation_and_line_endings(): void
     {
         $input = "<?php\r\n\t\$repository->findMatchingRecords(\$criteria)->all();\r\n";
-        $expected = "<?php\r\n\t\$repository\r\n\t\t->findMatchingRecords(\$criteria)\r\n\t\t->all();\r\n";
+        $expected = "<?php\r\n\t\$repository->findMatchingRecords(\$criteria)\r\n\t\t->all();\r\n";
 
         $this->assertSame($expected, $this->fix($input, 40, new WhitespacesFixerConfig("\t", "\r\n")));
     }
@@ -146,7 +234,7 @@ final class MethodChainFixerTest extends FixerTestCase
 
         $this->assertSame($input, $this->fix($input));
         $this->assertSame(
-            expected: "<?php\n        consume(" . str_replace('->', "\n            ->", $aboveLimit) . ', $other);',
+            expected: "<?php\n        consume(" . str_replace('->all()', "\n            ->all()", $aboveLimit) . ', $other);',
             actual: $this->fix("<?php\n        consume(" . $aboveLimit . ', $other);'),
         );
     }

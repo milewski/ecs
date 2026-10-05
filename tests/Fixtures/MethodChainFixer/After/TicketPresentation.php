@@ -30,8 +30,7 @@ final class TicketPresentation
             priority: $ticket->priority,
             status: $ticket->status,
             assignee: $ticket->assignee_name,
-            messages: $this->ticketMessageRepository
-                ->forTicket($ticket->id)
+            messages: $this->ticketMessageRepository->forTicket($ticket->id)
                 ->map(static fn (TicketMessage $message): TicketMessageData => new TicketMessageData(
                     id: (string) $message->id,
                     kind: $message->kind,

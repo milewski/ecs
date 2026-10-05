@@ -30,7 +30,7 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Long chains of at least two method calls place each method on a separate line.',
+            summary: 'Long chains keep the receiver and first call together, placing subsequent method calls on separate lines.',
             codeSamples: [
                 new CodeSample(
                     code: "<?php\n\$repository->findAllMatchingRecords(\$criteria)->map(\$callback)->all();\n",
@@ -103,11 +103,21 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
             }
 
-            if (count($operators) < 2 || $this->hasInlineLinks($tokens, $operators) === false) {
+            if (count($operators) < 2) {
                 continue;
             }
 
             $receiverStart = $this->receiverStart($tokens, $index);
+            $firstWrappedOperator = $this->receiverHasCall($tokens, $receiverStart, $index) ? 0 : 1;
+
+            if ($firstWrappedOperator === 1) {
+                $this->joinFirstCallToReceiver($tokens, $index);
+            }
+
+            if ($this->hasInlineLinks($tokens, $operators) === false) {
+                continue;
+            }
+
             $indentation = $this->getLineIndentation($tokens, $receiverStart);
 
             if ($this->lineLength($tokens, $receiverStart, $closeParenthesis) <= $this->configuration[ 'max_line_length' ]) {
@@ -118,11 +128,57 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
                 . $indentation
                 . $this->whitespacesConfig->getIndent();
 
-            for ($operatorIndex = count($operators) - 1; $operatorIndex >= 0; $operatorIndex--) {
+            for ($operatorIndex = count($operators) - 1; $operatorIndex >= $firstWrappedOperator; $operatorIndex--) {
                 $tokens->ensureWhitespaceAtIndex($operators[ $operatorIndex ] - 1, 1, $whitespace);
             }
 
         }
+    }
+
+    private function joinFirstCallToReceiver(Tokens $tokens, int $operator): void
+    {
+        $receiverEnd = $tokens->getPrevMeaningfulToken($operator);
+
+        for ($index = $receiverEnd + 1; $index < $operator; $index++) {
+
+            if ($tokens[ $index ]->isComment()) {
+                return;
+            }
+
+        }
+
+        $tokens->clearRange($receiverEnd + 1, $operator - 1);
+    }
+
+    private function receiverHasCall(Tokens $tokens, int $start, int $operator): bool
+    {
+        for ($index = $start; $index < $operator; $index++) {
+
+            $block = Tokens::detectBlockType($tokens[ $index ]);
+
+            if ($block === null || $block[ 'isStart' ] === false) {
+                continue;
+            }
+
+            if ($tokens[ $index ]->equals('(')) {
+
+                $previous = $tokens->getPrevMeaningfulToken($index);
+
+                if ($previous !== null && $previous >= $start
+                    && ($tokens[ $previous ]->isGivenKind([ T_STRING, T_VARIABLE, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE, T_STATIC, T_CLASS ])
+                        || $tokens[ $previous ]->equalsAny([ ')', ']' ]))) {
+                    return true;
+                }
+
+            } else {
+
+                $index = $tokens->findBlockEnd($block[ 'type' ], $index);
+
+            }
+
+        }
+
+        return false;
     }
 
     /**

@@ -29,8 +29,7 @@ final class CustomerSearch
 
         }
 
-        return $query
-            ->orderByDesc('id')
+        return $query->orderByDesc('id')
             ->offset(($search->page - 1) * CrmPageData::SIZE)
             ->limit(CrmPageData::SIZE + 1)
             ->get();
