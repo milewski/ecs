@@ -30,7 +30,7 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Long chains keep the receiver and first call together, placing subsequent method calls on separate lines.',
+            summary: 'Wrapped chains start with a property or factory expression, or with a variable and its first method call.',
             codeSamples: [
                 new CodeSample(
                     code: "<?php\n\$repository->findAllMatchingRecords(\$criteria)->map(\$callback)->all();\n",
@@ -79,17 +79,30 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
             }
 
-            if ($tokens[ $index ]->isObjectOperator() === false
-                || $booleanExpressions->contains($tokens[ $index ])
-                || $this->methodParentheses($tokens, $index) === null
-                || $this->continuesMethodChain($tokens, $index)) {
+            if ($tokens[ $index ]->isObjectOperator() === false) {
+                continue;
+            }
+
+            if ($booleanExpressions->contains($tokens[ $index ])) {
+                continue;
+            }
+
+            if ($this->methodParentheses($tokens, $index) === null) {
+                continue;
+            }
+
+            if ($this->continuesMethodChain($tokens, $index)) {
                 continue;
             }
 
             $operators = [];
             $cursor = $index;
 
-            while ($cursor !== null && $tokens[ $cursor ]->isObjectOperator()) {
+            while ($cursor !== null) {
+
+                if ($tokens[ $cursor ]->isObjectOperator() === false) {
+                    break;
+                }
 
                 $openParenthesis = $this->methodParentheses($tokens, $cursor);
 
@@ -103,25 +116,25 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
             }
 
-            if (count($operators) < 2) {
-                continue;
-            }
-
             $receiverStart = $this->receiverStart($tokens, $index);
-            $firstWrappedOperator = $this->receiverHasCall($tokens, $receiverStart, $index) ? 0 : 1;
+            $firstWrappedOperator = $this->receiverStartsChain($tokens, $receiverStart, $index) ? 0 : 1;
 
             if ($firstWrappedOperator === 1) {
                 $this->joinFirstCallToReceiver($tokens, $index);
             }
 
-            if ($this->hasInlineLinks($tokens, $operators) === false) {
+            if (count($operators) < 2) {
                 continue;
             }
 
             $indentation = $this->getLineIndentation($tokens, $receiverStart);
 
-            if ($this->lineLength($tokens, $receiverStart, $closeParenthesis) <= $this->configuration[ 'max_line_length' ]) {
-                continue;
+            if ($this->hasWrappedLinks($tokens, $operators) === false) {
+
+                if ($this->lineLength($tokens, $receiverStart, $closeParenthesis) <= $this->configuration[ 'max_line_length' ]) {
+                    continue;
+                }
+
             }
 
             $whitespace = $this->whitespacesConfig->getLineEnding()
@@ -150,30 +163,56 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
         $tokens->clearRange($receiverEnd + 1, $operator - 1);
     }
 
-    private function receiverHasCall(Tokens $tokens, int $start, int $operator): bool
+    private function receiverStartsChain(Tokens $tokens, int $start, int $operator): bool
     {
         for ($index = $start; $index < $operator; $index++) {
 
+            if ($tokens[ $index ]->isObjectOperator()) {
+                return true;
+            }
+
+            if ($tokens[ $index ]->isGivenKind(T_DOUBLE_COLON)) {
+                return true;
+            }
+
             $block = Tokens::detectBlockType($tokens[ $index ]);
 
-            if ($block === null || $block[ 'isStart' ] === false) {
+            if ($block === null) {
                 continue;
             }
 
-            if ($tokens[ $index ]->equals('(')) {
+            if ($block[ 'isStart' ] === false) {
+                continue;
+            }
 
-                $previous = $tokens->getPrevMeaningfulToken($index);
-
-                if ($previous !== null && $previous >= $start
-                    && ($tokens[ $previous ]->isGivenKind([ T_STRING, T_VARIABLE, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE, T_STATIC, T_CLASS ])
-                        || $tokens[ $previous ]->equalsAny([ ')', ']' ]))) {
-                    return true;
-                }
-
-            } else {
+            if ($tokens[ $index ]->equals('(') === false) {
 
                 $index = $tokens->findBlockEnd($block[ 'type' ], $index);
 
+                continue;
+
+            }
+
+            if ($index === $start) {
+                continue;
+            }
+
+            $previous = $tokens->getPrevMeaningfulToken($index);
+
+            if ($tokens[ $previous ]->isGivenKind([
+                T_STRING,
+                T_VARIABLE,
+                T_NAME_QUALIFIED,
+                T_NAME_FULLY_QUALIFIED,
+                T_NAME_RELATIVE,
+                T_STATIC,
+                T_CLASS,
+            ])) {
+                return true;
+            }
+
+            if ($tokens[ $previous ]->equalsAny([ ')', ']' ])) {
+                return true;
             }
 
         }
@@ -184,13 +223,13 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
     /**
      * @param list<int> $operators
      */
-    private function hasInlineLinks(Tokens $tokens, array $operators): bool
+    private function hasWrappedLinks(Tokens $tokens, array $operators): bool
     {
-        foreach (array_slice($operators, 1) as $operator) {
+        foreach ($operators as $operator) {
 
             $previous = $tokens->getPrevMeaningfulToken($operator);
 
-            if ($tokens->isPartialCodeMultiline($previous, $operator) === false) {
+            if ($tokens->isPartialCodeMultiline($previous, $operator)) {
                 return true;
             }
 
@@ -225,7 +264,13 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
             $previous = $tokens->getPrevMeaningfulToken($index);
 
-            if ($previous !== null && ($tokens[ $previous ]->isGivenKind([ T_STRING, T_VARIABLE, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE ]) || $tokens[ $previous ]->equalsAny([ ')', ']' ]))) {
+            if ($previous !== null && ($tokens[ $previous ]->isGivenKind([
+                T_STRING,
+                T_VARIABLE,
+                T_NAME_QUALIFIED,
+                T_NAME_FULLY_QUALIFIED,
+                T_NAME_RELATIVE,
+            ]) || $tokens[ $previous ]->equalsAny([ ')', ']' ]))) {
 
                 // The enclosing call can wrap its arguments without expanding this short nested chain.
                 $lines = preg_split('/\R/', $tokens->generatePartialCode($start, $end));
@@ -280,7 +325,14 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
                 $start = $tokens->findBlockStart($block[ 'type' ], $start);
                 $previous = $tokens->getPrevMeaningfulToken($start);
 
-                if ($previous !== null && $tokens[ $previous ]->isGivenKind([ T_STRING, T_VARIABLE, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE, T_STATIC ])) {
+                if ($previous !== null && $tokens[ $previous ]->isGivenKind([
+                    T_STRING,
+                    T_VARIABLE,
+                    T_NAME_QUALIFIED,
+                    T_NAME_FULLY_QUALIFIED,
+                    T_NAME_RELATIVE,
+                    T_STATIC,
+                ])) {
 
                     $start = $previous;
 

@@ -8,6 +8,16 @@ use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class MethodChainFixerTest extends EcsTestCase
 {
+    public function test_property_receivers_and_direct_methods_use_distinct_chain_starts(): void
+    {
+        $this->assertFixtureIsFixedTo(
+            inputFixture: __DIR__ . '/Fixtures/MethodChainFixer/Before/PermissionChains.php',
+            expectedFixture: __DIR__ . '/Fixtures/MethodChainFixer/After/PermissionChains.php',
+        );
+
+        $this->assertFixturePasses(__DIR__ . '/Fixtures/MethodChainFixer/After/PermissionChains.php');
+    }
+
     public function test_request_chains_keep_the_first_method_call_with_the_receiver(): void
     {
         $this->assertFixtureIsFixedTo(

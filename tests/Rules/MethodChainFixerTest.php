@@ -29,12 +29,160 @@ final class MethodChainFixerTest extends FixerTestCase
         return [
             'this' => [ '$this' ],
             'local variable' => [ '$repository' ],
-            'property' => [ '$this->repository' ],
-            'nested property' => [ '$this->services->repository' ],
             'array element' => [ '$repositories[\'primary\']' ],
             'array index containing a call' => [ '$repositories[key()]' ],
+            'array index containing a property' => [ '$repositories[$profile->primaryKey]' ],
             'grouped variable' => [ '($repository)' ],
+            'nested grouped variable' => [ '(($repository))' ],
         ];
+    }
+
+    #[DataProvider('providePropertyReceivers')]
+    public function test_wrapped_property_chains_begin_after_the_receiver_expression(string $receiver): void
+    {
+        $input = "<?php\n" . $receiver . "->first()\n    ->second();";
+        $expected = "<?php\n" . $receiver . "\n    ->first()\n    ->second();";
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public static function providePropertyReceivers(): array
+    {
+        return [
+            'local variable property' => [ '$role->permissions' ],
+            'this property' => [ '$this->repository' ],
+            'nested property' => [ '$this->services->repository' ],
+            'nullsafe property' => [ '$role?->permissions' ],
+            'dynamic property' => [ '$role->$property' ],
+            'static property' => [ 'Registry::$permissions' ],
+            'property array element' => [ '$role->permissions[\'primary\']' ],
+            'grouped property' => [ '($role->permissions)' ],
+            'property after a factory' => [ 'getRole()->permissions' ],
+        ];
+    }
+
+    #[DataProvider('provideCallableFactories')]
+    public function test_grouped_callable_factories_start_the_wrapped_chain(string $receiver): void
+    {
+        $input = "<?php\n" . $receiver . "->first()\n    ->second();";
+        $expected = "<?php\n" . $receiver . "\n    ->first()\n    ->second();";
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public static function provideCallableFactories(): array
+    {
+        return [
+            'array callable' => [ '($callbacks[\'primary\']())' ],
+            'grouped array callable' => [ '(($callbacks[\'primary\'])())' ],
+        ];
+    }
+
+    #[DataProvider('provideExcludedContexts')]
+    public function test_control_headers_and_sprintf_preserve_their_chains(string $input): void
+    {
+        $input = "<?php\n" . $input;
+
+        $this->assertSame($input, $this->fix($input, 10));
+    }
+
+    public static function provideExcludedContexts(): array
+    {
+        return [
+            'if header' => [ 'if ($role->permissions->first()->all()) {}' ],
+            'foreach header' => [ 'foreach ($role->permissions->first()->all() as $permission) {}' ],
+            'sprintf arguments' => [ 'sprintf(\'Permissions: %s\', $role->permissions->first()->all());' ],
+        ];
+    }
+
+    public function test_a_wrapped_property_link_wraps_the_remaining_short_links(): void
+    {
+        $input = "<?php\n\$role->permissions\n    ->first()->second();";
+        $expected = "<?php\n\$role->permissions\n    ->first()\n    ->second();";
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public function test_nullsafe_property_and_method_operators_are_preserved(): void
+    {
+        $input = "<?php\n\$role?->permissions?->first()\n    ?->second();";
+        $expected = "<?php\n\$role?->permissions\n    ?->first()\n    ?->second();";
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    #[DataProvider('provideSingleCallReceivers')]
+    public function test_a_single_method_call_joins_its_variable_receiver(string $receiver, string $operator): void
+    {
+        $input = "<?php\n" . $receiver . "\n    " . $operator . 'permissions();';
+        $expected = "<?php\n" . $receiver . $operator . 'permissions();';
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public static function provideSingleCallReceivers(): array
+    {
+        return [
+            'local variable' => [ '$role', '->' ],
+            'this' => [ '$this', '->' ],
+            'nullsafe variable' => [ '$role', '?->' ],
+            'grouped variable' => [ '($role)', '->' ],
+            'array element' => [ '$roles[\'primary\']', '->' ],
+        ];
+    }
+
+    public function test_single_receiver_comments_prevent_joining(): void
+    {
+        $input = "<?php\n\$role\n    // Explain permissions.\n    ->permissions();";
+
+        $this->assertSame($input, $this->fix($input));
+    }
+
+    public function test_ternary_property_chain_starts_after_the_property(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        return $role === null ? $profile->permissions() : $role->permissions->whereIn('name', array_column(CrmPermission::cases(), 'value'))
+            ->pluck('name')
+            ->all();
+        PHP;
+
+        $expected = <<<'PHP'
+        <?php
+        return $role === null ? $profile->permissions() : $role->permissions
+            ->whereIn('name', array_column(CrmPermission::cases(), 'value'))
+            ->pluck('name')
+            ->all();
+        PHP;
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public function test_ternary_direct_methods_keep_the_first_call_with_the_variable(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        return $role === null ? $profile->permissions() : $role
+            ->whereIn('name', array_column(CrmPermission::cases(), 'value'))
+            ->pluck('name')
+            ->all();
+        PHP;
+
+        $expected = <<<'PHP'
+        <?php
+        return $role === null ? $profile->permissions() : $role->whereIn('name', array_column(CrmPermission::cases(), 'value'))
+            ->pluck('name')
+            ->all();
+        PHP;
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
     }
 
     public function test_an_existing_nullsafe_chain_keeps_its_first_call_inline(): void
@@ -113,7 +261,7 @@ final class MethodChainFixerTest extends FixerTestCase
         return [
             'object property receiver' => [
                 '$this->repository->findMatchingRecords($criteria)->map($callback)->all()',
-                '$this->repository->findMatchingRecords($criteria)' . "\n    " . '->map($callback)' . "\n    " . '->all()',
+                '$this->repository' . "\n    " . '->findMatchingRecords($criteria)' . "\n    " . '->map($callback)' . "\n    " . '->all()',
             ],
             'nullsafe calls' => [
                 '$repository?->findMatchingRecords($criteria)?->map($callback)?->all()',
@@ -218,10 +366,16 @@ final class MethodChainFixerTest extends FixerTestCase
     {
         return [
             'inline constructor' => [ '        return new CustomerNotePageData(__CHAIN__, $hasMore);' ],
-            'expanded constructor' => [ "        return new CustomerNotePageData(\n            notes: __CHAIN__,\n            hasMore: \$hasMore,\n        );" ],
-            'deeply indented constructor' => [ "                return new CustomerNotePageData(\n                    notes: __CHAIN__,\n                    hasMore: \$hasMore,\n                );" ],
+            'expanded constructor' => [
+                "        return new CustomerNotePageData(\n            notes: __CHAIN__,\n            hasMore: \$hasMore,\n        );",
+            ],
+            'deeply indented constructor' => [
+                "                return new CustomerNotePageData(\n                    notes: __CHAIN__,\n                    hasMore: \$hasMore,\n                );",
+            ],
             'function argument' => [ '        consume(__CHAIN__, $hasMore);' ],
-            'named method argument' => [ "        \$receiver->consume(\n            notes: __CHAIN__,\n            hasMore: \$hasMore,\n        );" ],
+            'named method argument' => [
+                "        \$receiver->consume(\n            notes: __CHAIN__,\n            hasMore: \$hasMore,\n        );",
+            ],
         ];
     }
 
