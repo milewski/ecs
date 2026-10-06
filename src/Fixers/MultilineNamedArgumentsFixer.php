@@ -125,6 +125,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
     protected function applyFix(SplFileInfo $file, Tokens $tokens): void
     {
+        $this->compactPestTestCalls($tokens);
         $this->compactSprintfCalls($tokens);
         $this->expandLongCalls($tokens);
 
@@ -134,6 +135,102 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             $this->nameExpandedArguments($tokens);
 
         } while ($this->expandLongCalls($tokens));
+    }
+
+    private function isPestTestCall(Tokens $tokens, int $openParenthesis): bool
+    {
+        $name = $tokens->getPrevMeaningfulToken($openParenthesis);
+
+        if ($tokens[ $name ]->isGivenKind([ T_STRING, T_NAME_FULLY_QUALIFIED ]) === false) {
+            return false;
+        }
+
+        $callable = $this->readQualifiedNameEndingAt($tokens, $name);
+
+        if (\strcasecmp(\ltrim($callable[ 'name' ], '\\'), 'test') !== 0) {
+            return false;
+        }
+
+        $previous = $tokens->getPrevMeaningfulToken($callable[ 'start' ]);
+
+        return $tokens[ $previous ]->isGivenKind([ T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION, T_NEW, T_ATTRIBUTE, T_NAMESPACE, CT::T_NAMESPACE_OPERATOR, CT::T_RETURN_REF ]) === false;
+    }
+
+    private function compactPestTestCalls(Tokens $tokens): void
+    {
+        for ($index = $tokens->count() - 1; $index > 0; $index--) {
+
+            if ($tokens[ $index ]->equals('(') === false) {
+                continue;
+            }
+
+            if ($this->isPestTestCall($tokens, $index) === false) {
+                continue;
+            }
+
+            $end = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $index);
+            $ranges = $this->argumentRanges($tokens, $index, $end);
+            $arguments = $this->inspectArguments($tokens, $index, $end);
+
+            foreach ([ 'description', 'closure' ] as $position => $parameter) {
+
+                if (isset($arguments[ $position ]) === false) {
+                    continue;
+                }
+
+                $argument = $arguments[ $position ];
+
+                if ($argument[ 'name' ] !== $parameter) {
+                    continue;
+                }
+
+                $name = $tokens->getNextMeaningfulToken($argument[ 'start' ] - 1);
+                $colon = $tokens->getNextMeaningfulToken($name);
+
+                $tokens->clearAt($name);
+                $tokens->clearAt($colon);
+
+            }
+
+            $last = $tokens->getPrevMeaningfulToken($end);
+
+            if ($tokens[ $last ]->equals(',')) {
+
+                $tokens->clearAt($last);
+
+                $last = $tokens->getPrevMeaningfulToken($end);
+
+            }
+
+            $this->compactTestArgumentGap($tokens, $last, $end, '');
+
+            for ($argumentIndex = count($ranges) - 1; $argumentIndex >= 0; $argumentIndex--) {
+
+                $separator = $ranges[ $argumentIndex ][ 'start' ] - 1;
+                $first = $tokens->getNextMeaningfulToken($separator);
+
+                $this->compactTestArgumentGap($tokens, $separator, $first, $argumentIndex === 0 ? '' : ' ');
+
+            }
+
+        }
+    }
+
+    private function compactTestArgumentGap(Tokens $tokens, int $left, int $right, string $whitespace): void
+    {
+        for ($index = $left + 1; $index < $right; $index++) {
+
+            if ($tokens[ $index ]->isComment()) {
+                return;
+            }
+
+        }
+
+        $tokens->clearRange($left + 1, $right - 1);
+
+        if ($whitespace !== '') {
+            $tokens->ensureWhitespaceAtIndex($right - 1, 1, $whitespace);
+        }
     }
 
     private function compactShortSprintfWrappers(Tokens $tokens): void
@@ -351,6 +448,10 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             }
 
             if ($this->isCallArgumentList($tokens, $index) === false) {
+                continue;
+            }
+
+            if ($this->isPestTestCall($tokens, $index)) {
                 continue;
             }
 
@@ -607,6 +708,11 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         for ($index = count($openParentheses) - 1; $index >= 0; $index--) {
 
             $openParenthesis = $openParentheses[ $index ];
+
+            if ($this->isPestTestCall($tokens, $openParenthesis)) {
+                continue;
+            }
+
             $closeParenthesis = $tokens->findBlockEnd(
                 type: Tokens::BLOCK_TYPE_PARENTHESIS_BRACE,
                 searchIndex: $openParenthesis,

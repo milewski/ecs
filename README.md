@@ -55,6 +55,8 @@ Control structure headers, including `if`, `elseif`, and loop conditions, are ex
 
 `sprintf(...)` keeps its format and values on one line, even above the limit. Enclosing method calls place that expression on its own argument line, including single-argument calls such as `by(sprintf(...))`. A free function with only that argument, such as `trim(sprintf(...))`, stays inline when the whole line fits within 140 characters, including indentation, the named argument prefix, and any trailing expression. Previously expanded short wrappers are compacted too. Existing comments and literal multiline strings are preserved.
 
+Pest `test(...)` declarations keep the description and callback opening on the same line regardless of length. Previously expanded declarations are compacted, and `description:` and `closure:` names are removed when they match their positional order. Callback bodies, comments, and dataset chains retain their normal formatting. Methods and explicitly namespaced functions such as `Custom\test()` follow the ordinary call rules.
+
 All three rules accept a positive integer `max_line_length` option. To change the wrapping threshold in your `ecs.php` configuration:
 
 ```php
