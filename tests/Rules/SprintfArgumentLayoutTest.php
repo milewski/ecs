@@ -15,7 +15,7 @@ use SplFileInfo;
 final class SprintfArgumentLayoutTest extends FixerTestCase
 {
     #[DataProvider('provideSprintfCalls')]
-    public function test_sprintf_stays_inline_and_parent_arguments_expand(string $input, string $expected): void
+    public function test_sprintf_and_its_enclosing_call_follow_the_line_length_rule(string $input, string $expected): void
     {
         $input = "<?php\n" . $input . "\n";
         $expected = "<?php\n" . $expected . "\n";
@@ -47,15 +47,27 @@ final class SprintfArgumentLayoutTest extends FixerTestCase
             ],
             'static method wrapper' => [
                 "Formatter::normalize(sprintf('%s', \$value));",
-                "Formatter::normalize(\n    sprintf('%s', \$value)\n);",
+                "Formatter::normalize(sprintf('%s', \$value));",
             ],
             'constructor wrapper' => [
                 "new Label(sprintf('%s', \$value));",
-                "new Label(\n    sprintf('%s', \$value)\n);",
+                "new Label(sprintf('%s', \$value));",
+            ],
+            'previously expanded constructor wrapper' => [
+                "new Label(\n    sprintf('%s', \$value),\n);",
+                "new Label(sprintf('%s', \$value));",
+            ],
+            'previously expanded explicitly named constructor argument' => [
+                "new Label(\n    key: sprintf('%s', \$value),\n);",
+                "new Label(key: sprintf('%s', \$value));",
+            ],
+            'previously expanded nullsafe method argument' => [
+                "\$formatter?->normalize(\n    sprintf('%s', \$value),\n);",
+                "\$formatter?->normalize(sprintf('%s', \$value));",
             ],
             'dynamic function wrapper' => [
                 "\$normalize(sprintf('%s', \$value));",
-                "\$normalize(\n    sprintf('%s', \$value)\n);",
+                "\$normalize(sprintf('%s', \$value));",
             ],
             'grouped sprintf is an expression' => [
                 "\$label = (\n    sprintf('%s', \$value)\n);",
@@ -63,19 +75,19 @@ final class SprintfArgumentLayoutTest extends FixerTestCase
             ],
             'short nested sprintf' => [
                 '$limit->by(sprintf(\'crm-search:%s\', $userId));',
-                "\$limit->by(\n    sprintf('crm-search:%s', \$userId)\n);",
+                "\$limit->by(sprintf('crm-search:%s', \$userId));",
             ],
             'expanded nested sprintf' => [
                 "\$limit->by(sprintf(\n    'crm-search:%s',\n    \$request->user('crm')?->getAuthIdentifier(),\n));",
-                "\$limit->by(\n    sprintf('crm-search:%s', \$request->user('crm')?->getAuthIdentifier())\n);",
+                "\$limit->by(sprintf('crm-search:%s', \$request->user('crm')?->getAuthIdentifier()));",
             ],
             'fully qualified sprintf' => [
                 '$limit->by(\sprintf(\'%s\', $userId));',
-                "\$limit->by(\n    \\sprintf('%s', \$userId)\n);",
+                "\$limit->by(\\sprintf('%s', \$userId));",
             ],
             'named parent argument' => [
                 '$limit->by(key: sprintf(\'%s\', $userId));',
-                "\$limit->by(\n    key: sprintf('%s', \$userId)\n);",
+                "\$limit->by(key: sprintf('%s', \$userId));",
             ],
             'multiple parent arguments' => [
                 'unknown_call(sprintf(\'%s\', $userId), $other);',
@@ -128,6 +140,44 @@ final class SprintfArgumentLayoutTest extends FixerTestCase
         ];
     }
 
+    #[DataProvider('provideSingleArgumentCallLengths')]
+    public function test_single_sprintf_argument_calls_wrap_only_above_the_complete_line_limit(string $callable, int $lengthOffset): void
+    {
+        $line = "    \$result = $callable(sprintf('%s', \$value)) ?? 'fallback';";
+        $input = "<?php\n" . $line;
+        $expanded = "<?php\n    \$result = $callable(\n        sprintf('%s', \$value)\n    ) ?? 'fallback';";
+        $maximumLength = strlen($line) + $lengthOffset;
+        $expected = $lengthOffset >= 0 ? $input : $expanded;
+
+        $this->assertSame($expected, $this->fix($input, $maximumLength));
+        $this->assertSame($expected, $this->fix($expanded, $maximumLength));
+        $this->assertSame($expected, $this->fix($expected, $maximumLength));
+    }
+
+    public static function provideSingleArgumentCallLengths(): array
+    {
+        $cases = [];
+        $callables = [
+            'constructor' => 'new Middleware',
+            'qualified constructor' => 'new \\Middleware',
+            'static method' => 'Middleware::make',
+            'instance method' => '$formatter->normalize',
+            'nullsafe method' => '$formatter?->normalize',
+            'variable callable' => '$normalize',
+            'array callable' => '$callbacks[\'normalize\']',
+        ];
+
+        foreach ($callables as $label => $callable) {
+
+            foreach ([ 'below limit' => 1, 'at limit' => 0, 'above limit' => -1 ] as $boundary => $offset) {
+                $cases[ $label . ' ' . $boundary ] = [ $callable, $offset ];
+            }
+
+        }
+
+        return $cases;
+    }
+
     public function test_wrapper_compaction_uses_the_expanded_parent_layout_in_the_first_pass(): void
     {
         $input = "<?php\nunknown_call(name: trim(\n    sprintf('%s', \$value),\n) ?: 'fallback', other: sprintf('%s', \$anotherValue));";
@@ -149,6 +199,8 @@ final class SprintfArgumentLayoutTest extends FixerTestCase
     public static function provideUnsafeWrappers(): array
     {
         return [
+            'constructor comment' => [ "new Label(\n    // Explain the key.\n    sprintf('%s', \$value)\n);" ],
+            'method multiline string' => [ "\$formatter->normalize(\n    sprintf('first line\nsecond line %s', \$value)\n);" ],
             'comment' => [ "unknown_wrapper(\n    // Explain the label.\n    sprintf('%s', \$value)\n);" ],
             'multiline string' => [ "unknown_wrapper(\n    sprintf('first line\nsecond line %s', \$value)\n);" ],
             'closure body' => [ "unknown_wrapper(\n    sprintf('%s', static function () {\n        return 'value';\n    })\n);" ],
@@ -200,7 +252,7 @@ final class SprintfArgumentLayoutTest extends FixerTestCase
     public function test_sprintf_layout_respects_tabs_and_crlf(): void
     {
         $input = "<?php\r\n\t\$limit->by(sprintf(\r\n\t\t'%s',\r\n\t\t\$userId,\r\n\t));\r\n";
-        $expected = "<?php\r\n\t\$limit->by(\r\n\t\tsprintf('%s', \$userId)\r\n\t);\r\n";
+        $expected = "<?php\r\n\t\$limit->by(sprintf('%s', \$userId));\r\n";
         $tokens = Tokens::fromCode($input);
 
         foreach ([ new MethodChainFixer(), new MultilineNamedArgumentsFixer() ] as $fixer) {

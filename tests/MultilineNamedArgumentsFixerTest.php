@@ -8,6 +8,18 @@ use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class MultilineNamedArgumentsFixerTest extends EcsTestCase
 {
+    public function test_single_sprintf_constructor_argument_stays_inline_in_a_middleware_chain(): void
+    {
+        $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';
+
+        $this->assertFixtureIsFixedTo(
+            inputFixture: $fixtureDirectory . '/Before/ReportingJob.php',
+            expectedFixture: $fixtureDirectory . '/After/ReportingJob.php',
+        );
+
+        $this->assertFixturePasses($fixtureDirectory . '/After/ReportingJob.php');
+    }
+
     public function test_pest_declarations_stay_inline_with_positional_arguments(): void
     {
         $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';

@@ -44,7 +44,7 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
             'reflected static PHPDoc factory' => [
                 "use Milewski\\ECS\\Tests\\Support\\ReflectionRateLimit as Limit;\n",
                 'Limit::perMinute(30)->by',
-                "sprintf('crm-search:%s', \$request->user('crm')?->getAuthIdentifier())",
+                "\$request->user('crm')?->getAuthIdentifier()",
                 'key',
             ],
         ];
@@ -59,7 +59,7 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
         $this->assertSame($expected, $this->fix($expected));
     }
 
-    public function test_inline_sprintf_argument_is_wrapped_and_named_in_one_pass(): void
+    public function test_sprintf_argument_is_wrapped_and_named_when_the_line_exceeds_the_limit(): void
     {
         $input = <<<'PHP'
         <?php
@@ -77,8 +77,32 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
         );
         PHP;
 
-        $this->assertSame($expected, $this->fix($input));
-        $this->assertSame($expected, $this->fix($expected));
+        $this->assertSame($expected, $this->fix($input, 40));
+        $this->assertSame($expected, $this->fix($expected, 40));
+    }
+
+    public function test_short_single_sprintf_arguments_stay_inline_without_added_parameter_names(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        use Milewski\ECS\Tests\Support\ReflectionRateLimit as Limit;
+
+        Limit::perMinute(30)->by(sprintf('crm-search:%s', $userId));
+        PHP;
+
+        $this->assertSame($input, $this->fix($input));
+        $this->assertSame($input, $this->fix($this->fix($input)));
+    }
+
+    public function test_single_sprintf_constructor_arguments_are_named_only_after_the_line_wraps(): void
+    {
+        $declaration = "<?php\nfinal class Middleware { public function __construct(string \$key) {} }\n";
+        $input = $declaration . "new Middleware(sprintf('reporting-google-ads:%s', \$credential));";
+        $expected = $declaration . "new Middleware(\n    key: sprintf('reporting-google-ads:%s', \$credential)\n);";
+
+        $this->assertSame($input, $this->fix($input));
+        $this->assertSame($expected, $this->fix($input, 40));
+        $this->assertSame($expected, $this->fix($expected, 40));
     }
 
     #[DataProvider('provideUnsafeSingleArgumentCalls')]
@@ -252,15 +276,7 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
         $second = '$secondLongValue';
         $cases = [];
 
-        foreach ([
-            'unknown_function',
-            'UnknownFactory::make',
-            '$service->make',
-            '$service?->make',
-            '$factory',
-            'new UnknownData',
-            '$callbacks[\'make\']',
-        ] as $callable) {
+        foreach ([ 'unknown_function', 'UnknownFactory::make', '$service->make', '$service?->make', '$factory', 'new UnknownData', '$callbacks[\'make\']' ] as $callable) {
 
             $cases[ $callable ] = [
                 sprintf('%s(%s, %s)', $callable, $first, $second),

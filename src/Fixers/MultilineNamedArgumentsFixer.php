@@ -249,7 +249,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
             $arguments = $this->argumentRanges($tokens, $index, $end);
 
-            if ($this->isSprintfFunctionWrapper($tokens, $index, $arguments) === false) {
+            if ($this->isSingleSprintfArgumentCall($tokens, $index, $arguments) === false) {
                 continue;
             }
 
@@ -274,7 +274,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
     /**
      * @param list<array{start: int, end: int}> $arguments
      */
-    private function isSprintfFunctionWrapper(Tokens $tokens, int $openParenthesis, array $arguments): bool
+    private function isSingleSprintfArgumentCall(Tokens $tokens, int $openParenthesis, array $arguments): bool
     {
         if (count($arguments) !== 1) {
             return false;
@@ -284,16 +284,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             return false;
         }
 
-        $name = $tokens->getPrevMeaningfulToken($openParenthesis);
-
-        if ($this->isNameToken($tokens[ $name ]) === false) {
-            return false;
-        }
-
-        $callable = $this->readQualifiedNameEndingAt($tokens, $name);
-        $previous = $tokens->getPrevMeaningfulToken($callable[ 'start' ]);
-
-        return $tokens[ $previous ]->isGivenKind([ T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_NEW, T_FUNCTION, T_FN ]) === false;
+        return $this->isCallArgumentList($tokens, $openParenthesis);
     }
 
     private function compactSprintfCalls(Tokens $tokens): void
@@ -470,7 +461,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
                 if ($hasSprintfArgument) {
 
-                    if ($this->isSprintfFunctionWrapper($tokens, $index, $arguments)) {
+                    if ($this->isSingleSprintfArgumentCall($tokens, $index, $arguments)) {
 
                         if (LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ]) {
                             continue;
