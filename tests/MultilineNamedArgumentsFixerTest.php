@@ -8,6 +8,18 @@ use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class MultilineNamedArgumentsFixerTest extends EcsTestCase
 {
+    public function test_expression_arrays_function_wrappers_and_variable_widths_with_the_default_preset(): void
+    {
+        $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';
+
+        $this->assertFixtureIsFixedTo(
+            inputFixture: $fixtureDirectory . '/Before/ExpressionLayouts.php',
+            expectedFixture: $fixtureDirectory . '/After/ExpressionLayouts.php',
+        );
+
+        $this->assertFixturePasses($fixtureDirectory . '/After/ExpressionLayouts.php');
+    }
+
     public function test_single_rate_limit_key_is_named_with_the_default_preset(): void
     {
         $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';

@@ -14,6 +14,49 @@ use SplFileInfo;
 
 final class MethodChainFixerTest extends FixerTestCase
 {
+    #[DataProvider('provideVariableWidths')]
+    public function test_variable_receivers_must_reach_the_first_parenthesis_to_stand_alone(string $variable, string $operator, string $method, string $indent, bool $canStandAlone): void
+    {
+        $input = "<?php\n" . $indent . $variable . "\n" . $indent . $indent . $operator . $method . "('message')\n"
+            . $indent . $indent . $operator . 'send();';
+
+        $expected = $canStandAlone ? $input : "<?php\n" . $indent . $variable . $operator . $method . "('message')\n"
+            . $indent . $indent . $operator . 'send();';
+
+        $whitespaces = new WhitespacesFixerConfig($indent);
+
+        $this->assertSame($expected, $this->fix($input, 120, $whitespaces));
+        $this->assertSame($expected, $this->fix($expected, 120, $whitespaces));
+    }
+
+    public static function provideVariableWidths(): array
+    {
+        return [
+            'short user example' => [ '$aaa', '->', 'body', '    ', false ],
+            'below body parenthesis' => [ '$aaaaaaaaa', '->', 'body', '    ', false ],
+            'at body parenthesis' => [ '$aaaaaaaaaa', '->', 'body', '    ', true ],
+            'above body parenthesis' => [ '$notification', '->', 'body', '    ', true ],
+            'longer method needs a wider receiver' => [ '$notification', '->', 'description', '    ', false ],
+            'shorter method accepts a narrower receiver' => [ '$aaaaaaa', '->', 'a', '    ', true ],
+            'nullsafe below parenthesis' => [ '$aaaaaaaaaa', '?->', 'body', '    ', false ],
+            'nullsafe at parenthesis' => [ '$aaaaaaaaaaa', '?->', 'body', '    ', true ],
+            'two space indentation below boundary' => [ '$aaaaaaa', '->', 'body', '  ', false ],
+            'two space indentation at boundary' => [ '$aaaaaaaa', '->', 'body', '  ', true ],
+            'tab indentation below boundary' => [ '$aaaaaaaaa', '->', 'body', "\t", false ],
+            'tab indentation at boundary' => [ '$aaaaaaaaaa', '->', 'body', "\t", true ],
+            'dynamic method name counts its width' => [ '$notification', '->', '$methodName', '    ', false ],
+        ];
+    }
+
+    public function test_wide_variables_start_newly_wrapped_chains_and_preserve_single_call_gaps(): void
+    {
+        $input = "<?php\n\$notification->body('message')->warning()->send();\n\$notification\n    ->body('message');";
+        $expected = "<?php\n\$notification\n    ->body('message')\n    ->warning()\n    ->send();\n\$notification\n    ->body('message');";
+
+        $this->assertSame($expected, $this->fix($input, 30));
+        $this->assertSame($expected, $this->fix($expected, 30));
+    }
+
     #[DataProvider('provideReceiverLayouts')]
     public function test_previously_wrapped_chains_join_the_first_call_to_the_receiver(string $receiver): void
     {
@@ -215,7 +258,7 @@ final class MethodChainFixerTest extends FixerTestCase
     {
         $input = <<<'PHP'
         <?php
-        $repository
+        $repo
             ->find(
                 first: $first,
                 second: $second,
@@ -225,7 +268,7 @@ final class MethodChainFixerTest extends FixerTestCase
 
         $expected = <<<'PHP'
         <?php
-        $repository->find(
+        $repo->find(
                 first: $first,
                 second: $second,
             )
@@ -238,8 +281,8 @@ final class MethodChainFixerTest extends FixerTestCase
 
     public function test_existing_chains_are_repaired_with_tabs_and_crlf(): void
     {
-        $input = "<?php\r\n\t\$repository\r\n\t\t->find(\$id)\r\n\t\t->all();\r\n";
-        $expected = "<?php\r\n\t\$repository->find(\$id)\r\n\t\t->all();\r\n";
+        $input = "<?php\r\n\t\$repo\r\n\t\t->find(\$id)\r\n\t\t->all();\r\n";
+        $expected = "<?php\r\n\t\$repo->find(\$id)\r\n\t\t->all();\r\n";
         $whitespaces = new WhitespacesFixerConfig("\t", "\r\n");
 
         $this->assertSame($expected, $this->fix($input, 120, $whitespaces));
@@ -293,7 +336,7 @@ final class MethodChainFixerTest extends FixerTestCase
             ],
             'nested short chain in callback' => [
                 '$repository->map(fn ($value) => $value->first()->second())->all()',
-                '$repository->map(fn ($value) => $value->first()->second())' . "\n    " . '->all()',
+                '$repository' . "\n    " . '->map(fn ($value) => $value->first()->second())' . "\n    " . '->all()',
             ],
             'comments between calls' => [
                 '$repository->first($criteria) /* explain */ ->second()',

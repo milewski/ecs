@@ -130,9 +130,73 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         do {
 
+            $this->compactShortSprintfWrappers($tokens);
             $this->nameExpandedArguments($tokens);
 
         } while ($this->expandLongCalls($tokens));
+    }
+
+    private function compactShortSprintfWrappers(Tokens $tokens): void
+    {
+        for ($index = $tokens->count() - 1; $index > 0; $index--) {
+
+            if ($tokens[ $index ]->equals('(') === false) {
+                continue;
+            }
+
+            $end = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $index);
+
+            if ($tokens->isPartialCodeMultiline($index, $end) === false) {
+                continue;
+            }
+
+            $arguments = $this->argumentRanges($tokens, $index, $end);
+
+            if ($this->isSprintfFunctionWrapper($tokens, $index, $arguments) === false) {
+                continue;
+            }
+
+            if ($this->canCompactCall($tokens, $index, $end) === false) {
+                continue;
+            }
+
+            $compacted = clone $tokens;
+
+            $this->compactCall($compacted, $index, $end);
+
+            if (LineLengthAnalyzer::maximumLength($compacted, $index, $end) > $this->configuration[ 'max_line_length' ]) {
+                continue;
+            }
+
+            $this->compactCall($tokens, $index, $end);
+
+        }
+
+    }
+
+    /**
+     * @param list<array{start: int, end: int}> $arguments
+     */
+    private function isSprintfFunctionWrapper(Tokens $tokens, int $openParenthesis, array $arguments): bool
+    {
+        if (count($arguments) !== 1) {
+            return false;
+        }
+
+        if ($this->hasSprintfArgument($tokens, $arguments) === false) {
+            return false;
+        }
+
+        $name = $tokens->getPrevMeaningfulToken($openParenthesis);
+
+        if ($this->isNameToken($tokens[ $name ]) === false) {
+            return false;
+        }
+
+        $callable = $this->readQualifiedNameEndingAt($tokens, $name);
+        $previous = $tokens->getPrevMeaningfulToken($callable[ 'start' ]);
+
+        return $tokens[ $previous ]->isGivenKind([ T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_NEW, T_FUNCTION, T_FN ]) === false;
     }
 
     private function compactSprintfCalls(Tokens $tokens): void
@@ -278,9 +342,15 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
             }
 
-            if ($tokens[ $index ]->equals('(') === false
-                || $booleanExpressions->contains($tokens[ $index ])
-                || $this->isCallArgumentList($tokens, $index) === false) {
+            if ($tokens[ $index ]->equals('(') === false) {
+                continue;
+            }
+
+            if ($booleanExpressions->contains($tokens[ $index ])) {
+                continue;
+            }
+
+            if ($this->isCallArgumentList($tokens, $index) === false) {
                 continue;
             }
 
@@ -295,10 +365,34 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             $hasSprintfArgument = $this->hasSprintfArgument($tokens, $arguments);
             $hasBrokenChain = $this->hasBrokenChainArgument($tokens, $arguments);
 
-            if ($isExpanded === false && ((count($arguments) < 2 && $hasSprintfArgument === false)
-                || ($hasSprintfArgument === false && $hasBrokenChain === false
-                    && LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ]))) {
-                continue;
+            if ($isExpanded === false) {
+
+                if ($hasSprintfArgument) {
+
+                    if ($this->isSprintfFunctionWrapper($tokens, $index, $arguments)) {
+
+                        if (LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ]) {
+                            continue;
+                        }
+
+                    }
+
+                } else {
+
+                    if (count($arguments) < 2) {
+                        continue;
+                    }
+
+                    if ($hasBrokenChain === false) {
+
+                        if (LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ]) {
+                            continue;
+                        }
+
+                    }
+
+                }
+
             }
 
             $indentation = $this->getLineIndentation($tokens, $index);
@@ -312,10 +406,12 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
                 $start = $arguments[ $argumentIndex ][ 'start' ];
                 $first = $tokens->getNextNonWhitespace($start - 1);
 
-                if ($argumentIndex > 0 && $tokens[ $first ]->isComment()
-                    && str_starts_with($tokens[ $first ]->getContent(), '/*') === false
-                    && $tokens->isPartialCodeMultiline($start - 1, $first) === false) {
-                    $first = $tokens->getNextNonWhitespace($first);
+                if ($argumentIndex > 0) {
+
+                    if ($this->hasTrailingLineComment($tokens, $start, $first)) {
+                        $first = $tokens->getNextNonWhitespace($first);
+                    }
+
                 }
 
                 $changed = $this->ensureWhitespaceBefore($tokens, $first, $argumentIndentation) || $changed;
@@ -325,6 +421,19 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         }
 
         return $changed;
+    }
+
+    private function hasTrailingLineComment(Tokens $tokens, int $start, int $first): bool
+    {
+        if ($tokens[ $first ]->isComment() === false) {
+            return false;
+        }
+
+        if (\str_starts_with($tokens[ $first ]->getContent(), '/*')) {
+            return false;
+        }
+
+        return $tokens->isPartialCodeMultiline($start - 1, $first) === false;
     }
 
     private function ensureWhitespaceBefore(Tokens $tokens, int $index, string $whitespace): bool
@@ -443,17 +552,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             $previousOpen = $tokens->findBlockStart(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $nameIndex);
             $beforePreviousOpen = $tokens->getPrevMeaningfulToken($previousOpen);
 
-            return $beforePreviousOpen === null || $tokens[ $beforePreviousOpen ]->isGivenKind([
-                T_IF,
-                T_ELSEIF,
-                T_FOR,
-                T_FOREACH,
-                T_WHILE,
-                T_SWITCH,
-                T_MATCH,
-                T_CATCH,
-                T_DECLARE,
-            ]) === false;
+            return $beforePreviousOpen === null || $tokens[ $beforePreviousOpen ]->isGivenKind([ T_IF, T_ELSEIF, T_FOR, T_FOREACH, T_WHILE, T_SWITCH, T_MATCH, T_CATCH, T_DECLARE ]) === false;
 
         }
 
@@ -870,14 +969,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             $previous = $tokens->getPrevMeaningfulToken($index);
 
             if ($previous !== null
-                && $tokens[ $previous ]->isGivenKind([
-                    T_OBJECT_OPERATOR,
-                    T_NULLSAFE_OBJECT_OPERATOR,
-                    T_DOUBLE_COLON,
-                    T_FUNCTION,
-                    T_FN,
-                    T_NEW,
-                ])) {
+                && $tokens[ $previous ]->isGivenKind([ T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION, T_FN, T_NEW ])) {
                 continue;
             }
 
@@ -2003,28 +2095,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
                 break;
             }
 
-            if ($tokens[ $index ]->equalsAny([
-                '?',
-                ':',
-                '+',
-                '-',
-                '*',
-                '/',
-                '%',
-                '.',
-                '<',
-                '>',
-                '<=',
-                '>=',
-                '==',
-                '===',
-                '!=',
-                '!==',
-                '<=>',
-                '??',
-                '&&',
-                '||',
-            ])) {
+            if ($tokens[ $index ]->equalsAny([ '?', ':', '+', '-', '*', '/', '%', '.', '<', '>', '<=', '>=', '==', '===', '!=', '!==', '<=>', '??', '&&', '||' ])) {
                 return null;
             }
 
@@ -2043,15 +2114,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
                 return false;
             }
 
-            if ($tokens[ $index ]->isGivenKind([
-                T_DO,
-                T_ELSE,
-                T_ELSEIF,
-                T_FOR,
-                T_FOREACH,
-                T_IF,
-                T_WHILE,
-            ])) {
+            if ($tokens[ $index ]->isGivenKind([ T_DO, T_ELSE, T_ELSEIF, T_FOR, T_FOREACH, T_IF, T_WHILE ])) {
                 return true;
             }
 
@@ -2934,22 +2997,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         }
 
-        if (in_array($normalizedType, [
-            'array',
-            'bool',
-            'callable',
-            'false',
-            'float',
-            'int',
-            'iterable',
-            'mixed',
-            'never',
-            'null',
-            'object',
-            'string',
-            'true',
-            'void',
-        ], true)) {
+        if (in_array($normalizedType, [ 'array', 'bool', 'callable', 'false', 'float', 'int', 'iterable', 'mixed', 'never', 'null', 'object', 'string', 'true', 'void' ], true)) {
             return null;
         }
 

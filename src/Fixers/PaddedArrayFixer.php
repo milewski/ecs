@@ -4,6 +4,8 @@ declare(strict_types = 1);
 
 namespace Milewski\ECS\Fixers;
 
+use Milewski\ECS\TokenAnalyzer\BooleanExpressionAnalyzer;
+use Milewski\ECS\TokenAnalyzer\ControlStructureHeaderAnalyzer;
 use Milewski\ECS\TokenAnalyzer\LineLengthAnalyzer;
 use PhpCsFixer\AbstractFixer;
 use PhpCsFixer\Fixer\ConfigurableFixerInterface;
@@ -17,8 +19,10 @@ use PhpCsFixer\FixerDefinition\CodeSample;
 use PhpCsFixer\FixerDefinition\FixerDefinition;
 use PhpCsFixer\FixerDefinition\FixerDefinitionInterface;
 use PhpCsFixer\Tokenizer\CT;
+use PhpCsFixer\Tokenizer\Token;
 use PhpCsFixer\Tokenizer\Tokens;
 use SplFileInfo;
+use SplObjectStorage;
 
 final class PaddedArrayFixer extends AbstractFixer implements ConfigurableFixerInterface, WhitespacesAwareFixerInterface
 {
@@ -59,6 +63,8 @@ final class PaddedArrayFixer extends AbstractFixer implements ConfigurableFixerI
 
     protected function applyFix(SplFileInfo $file, Tokens $tokens): void
     {
+        $expressionArrays = $this->expressionArrays($tokens);
+
         for ($index = 0; $index < $tokens->count(); $index++) {
 
             if ($tokens[ $index ]->equals('[')) {
@@ -66,13 +72,60 @@ final class PaddedArrayFixer extends AbstractFixer implements ConfigurableFixerI
             }
 
             if ($tokens[ $index ]->isGivenKind([ CT::T_ARRAY_SQUARE_BRACE_OPEN ])) {
-                $this->fixArray($tokens, $index);
+                $this->fixArray($tokens, $index, isset($expressionArrays[ $tokens[ $index ] ]) === false);
             }
 
         }
     }
 
-    private function fixArray(Tokens $tokens, int $openingBracketIndex): void
+    /**
+     * @return SplObjectStorage<Token, null>
+     */
+    private function expressionArrays(Tokens $tokens): SplObjectStorage
+    {
+        $arrays = new SplObjectStorage();
+        $booleanExpressions = new BooleanExpressionAnalyzer($tokens);
+        $excludedUntil = -1;
+
+        foreach ($tokens as $index => $token) {
+
+            $headerEnd = ControlStructureHeaderAnalyzer::findEnd($tokens, $index);
+
+            if ($headerEnd !== null) {
+
+                $excludedUntil = \max($excludedUntil, $headerEnd);
+
+                if ($token->isGivenKind(T_MATCH)) {
+
+                    $body = $tokens->getNextMeaningfulToken($headerEnd);
+                    $excludedUntil = \max($excludedUntil, $tokens->findBlockEnd(Tokens::BLOCK_TYPE_CURLY_BRACE, $body));
+
+                }
+
+            }
+
+            if ($token->isGivenKind(CT::T_ARRAY_SQUARE_BRACE_OPEN) === false) {
+                continue;
+            }
+
+            if ($index <= $excludedUntil) {
+
+                $arrays[ $token ] = null;
+
+                continue;
+
+            }
+
+            if ($booleanExpressions->contains($token)) {
+                $arrays[ $token ] = null;
+            }
+
+        }
+
+        return $arrays;
+    }
+
+    private function fixArray(Tokens $tokens, int $openingBracketIndex, bool $canExpand): void
     {
         $closingBracketIndex = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_ARRAY_SQUARE_BRACE, $openingBracketIndex);
         $nextMeaningfulTokenIndex = $tokens->getNextMeaningfulToken($openingBracketIndex);
@@ -88,11 +141,21 @@ final class PaddedArrayFixer extends AbstractFixer implements ConfigurableFixerI
 
         }
 
-        if ($this->shouldExpandArray($tokens, $openingBracketIndex, $closingBracketIndex)) {
+        if ($canExpand === false) {
 
-            $this->expandArray($tokens, $openingBracketIndex, $closingBracketIndex);
+            if ($this->compactExpressionArray($tokens, $openingBracketIndex, $closingBracketIndex) === false) {
+                return;
+            }
 
-            return;
+        } else {
+
+            if ($this->shouldExpandArray($tokens, $openingBracketIndex, $closingBracketIndex)) {
+
+                $this->expandArray($tokens, $openingBracketIndex, $closingBracketIndex);
+
+                return;
+
+            }
 
         }
 
@@ -116,11 +179,54 @@ final class PaddedArrayFixer extends AbstractFixer implements ConfigurableFixerI
             $tokens->ensureWhitespaceAtIndex($previousMeaningfulTokenIndex, 1, ' ');
         }
 
+        if ($canExpand === false) {
+            return;
+        }
+
         $closingBracketIndex = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_ARRAY_SQUARE_BRACE, $openingBracketIndex);
 
         if ($this->shouldExpandArray($tokens, $openingBracketIndex, $closingBracketIndex)) {
             $this->expandArray($tokens, $openingBracketIndex, $closingBracketIndex);
         }
+    }
+
+    private function compactExpressionArray(Tokens $tokens, int $start, int $end): bool
+    {
+        for ($index = $start + 1; $index < $end; $index++) {
+
+            if ($tokens[ $index ]->isComment()) {
+                return false;
+            }
+
+            if ($tokens[ $index ]->equals('{')) {
+                return false;
+            }
+
+            if ($tokens[ $index ]->isWhitespace()) {
+                continue;
+            }
+
+            if (\preg_match('/\R/', $tokens[ $index ]->getContent()) === 1) {
+                return false;
+            }
+
+        }
+
+        $last = $tokens->getPrevMeaningfulToken($end);
+
+        if ($tokens[ $last ]->equals(',')) {
+            $tokens->clearRange($tokens->getPrevMeaningfulToken($last) + 1, $last);
+        }
+
+        for ($index = $start + 1; $index < $end; $index++) {
+
+            if ($tokens[ $index ]->isGivenKind(T_WHITESPACE)) {
+                $tokens[ $index ] = new Token([ T_WHITESPACE, ' ' ]);
+            }
+
+        }
+
+        return true;
     }
 
     private function shouldExpandArray(Tokens $tokens, int $openingBracketIndex, int $closingBracketIndex): bool
