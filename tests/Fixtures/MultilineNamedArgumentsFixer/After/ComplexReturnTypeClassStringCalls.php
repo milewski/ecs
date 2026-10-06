@@ -23,7 +23,7 @@ abstract class ComplexReturnTypeClassStringCalls
     protected function handleNestedUpdate(RecordManager $record, array $data): RecordManager
     {
         return $this->wrap(
-            static fn (): RecordManager => complex_return_app(RecordManager::class)->update(
+            callback: static fn (): RecordManager => complex_return_app(RecordManager::class)->update(
                 record: $record,
                 data: LandingGroupData::fromFilament($data),
             ),

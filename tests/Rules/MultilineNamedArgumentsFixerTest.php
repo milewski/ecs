@@ -14,6 +14,95 @@ use SplFileInfo;
 
 final class MultilineNamedArgumentsFixerTest extends FixerTestCase
 {
+    #[DataProvider('provideSingleArgumentCalls')]
+    public function test_expanded_single_arguments_are_named(string $declaration, string $callable, string $value, string $name): void
+    {
+        $input = "<?php\n" . $declaration . sprintf("%s(\n    %s,\n);\n", $callable, $value);
+        $expected = "<?php\n" . $declaration . sprintf("%s(\n    %s: %s,\n);\n", $callable, $name, $value);
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public static function provideSingleArgumentCalls(): array
+    {
+        $function = "function consume(mixed \$value, bool \$optional = false): void {}\n";
+        $class = "final class Subject { public function __construct(mixed \$value) {} public static function make(mixed \$value): void {} public function consume(mixed \$value): void {} }\n";
+
+        return [
+            'source function with optional second parameter' => [ $function, 'consume', '$payload', 'value' ],
+            'source constructor' => [ $class, 'new Subject', '$payload', 'value' ],
+            'source static method' => [ $class, 'Subject::make', '$payload', 'value' ],
+            'source instance method' => [ $class . '$subject = new Subject(null);' . "\n", '$subject->consume', '$payload', 'value' ],
+            'native function' => [ '', '\\trim', '$payload', 'string' ],
+            'explicitly expanded callback' => [
+                "function consume(callable \$callback): void {}\n",
+                'consume',
+                'static fn (): bool => true',
+                'callback',
+            ],
+            'reflected static PHPDoc factory' => [
+                "use Milewski\\ECS\\Tests\\Support\\ReflectionRateLimit as Limit;\n",
+                'Limit::perMinute(30)->by',
+                "sprintf('crm-search:%s', \$request->user('crm')?->getAuthIdentifier())",
+                'key',
+            ],
+        ];
+    }
+
+    public function test_named_single_argument_preserves_its_leading_comment(): void
+    {
+        $input = "<?php\nfunction consume(mixed \$value): void {}\nconsume(\n    /* Keep this explanation. */ \$payload,\n);\n";
+        $expected = str_replace('*/ $payload', '*/ value: $payload', $input);
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public function test_inline_sprintf_argument_is_wrapped_and_named_in_one_pass(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        use Milewski\ECS\Tests\Support\ReflectionRateLimit as Limit;
+
+        Limit::perMinute(30)->by(sprintf('crm-search:%s', $userId));
+        PHP;
+
+        $expected = <<<'PHP'
+        <?php
+        use Milewski\ECS\Tests\Support\ReflectionRateLimit as Limit;
+
+        Limit::perMinute(30)->by(
+            key: sprintf('crm-search:%s', $userId)
+        );
+        PHP;
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    #[DataProvider('provideUnsafeSingleArgumentCalls')]
+    public function test_single_argument_calls_keep_their_binding_when_names_are_unsafe(string $input): void
+    {
+        $input = "<?php\n" . $input;
+
+        $this->assertSame($input, $this->fix($input));
+    }
+
+    public static function provideUnsafeSingleArgumentCalls(): array
+    {
+        return [
+            'unresolved function' => [ "unknown_call(\n    \$value,\n);\n" ],
+            'unresolved receiver' => [ "\$unknown->by(\n    \$value,\n);\n" ],
+            'variadic argument' => [ "function consume(mixed ...\$values): void {}\nconsume(\n    \$value,\n);\n" ],
+            'unpacked argument' => [ "function consume(mixed \$value): void {}\nconsume(\n    ...\$values,\n);\n" ],
+            'no arguments' => [ "function consume(): void {}\nconsume(\n);\n" ],
+            'inline single argument' => [ "function consume(mixed \$value): void {}\nconsume(\$payload);\n" ],
+            'first class callable' => [ "function consume(mixed \$value): void {}\n\$callback = consume(...);\n" ],
+            'multiline function declaration' => [ "function consume(\n    mixed \$value,\n): void {}\n" ],
+        ];
+    }
+
     #[DataProvider('provideExpandedCalls')]
     public function test_expanded_calls_place_each_top_level_argument_on_its_own_line(string $callable): void
     {
@@ -129,7 +218,10 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
         return [
             'inline first argument' => [ "<?php\nunknown_call(first: 1,\n    second: 2, third: 3);" ],
             'only closing parenthesis is on a new line' => [ "<?php\nunknown_call(first: 1, second: 2, third: 3\n);" ],
-            'leading comment before expanded first argument' => [ "<?php\nunknown_call(/* Values */\n    first: 1, second: 2, third: 3);", true ],
+            'leading comment before expanded first argument' => [
+                "<?php\nunknown_call(/* Values */\n    first: 1, second: 2, third: 3);",
+                true,
+            ],
         ];
     }
 
@@ -160,7 +252,15 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
         $second = '$secondLongValue';
         $cases = [];
 
-        foreach ([ 'unknown_function', 'UnknownFactory::make', '$service->make', '$service?->make', '$factory', 'new UnknownData', '$callbacks[\'make\']' ] as $callable) {
+        foreach ([
+            'unknown_function',
+            'UnknownFactory::make',
+            '$service->make',
+            '$service?->make',
+            '$factory',
+            'new UnknownData',
+            '$callbacks[\'make\']',
+        ] as $callable) {
 
             $cases[ $callable ] = [
                 sprintf('%s(%s, %s)', $callable, $first, $second),

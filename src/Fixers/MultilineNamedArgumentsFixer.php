@@ -443,7 +443,17 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             $previousOpen = $tokens->findBlockStart(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $nameIndex);
             $beforePreviousOpen = $tokens->getPrevMeaningfulToken($previousOpen);
 
-            return $beforePreviousOpen === null || $tokens[ $beforePreviousOpen ]->isGivenKind([ T_IF, T_ELSEIF, T_FOR, T_FOREACH, T_WHILE, T_SWITCH, T_MATCH, T_CATCH, T_DECLARE ]) === false;
+            return $beforePreviousOpen === null || $tokens[ $beforePreviousOpen ]->isGivenKind([
+                T_IF,
+                T_ELSEIF,
+                T_FOR,
+                T_FOREACH,
+                T_WHILE,
+                T_SWITCH,
+                T_MATCH,
+                T_CATCH,
+                T_DECLARE,
+            ]) === false;
 
         }
 
@@ -509,8 +519,11 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
             $arguments = $this->inspectArguments($tokens, $openParenthesis, $closeParenthesis);
 
-            if ($this->hasExpandedArgumentList($tokens, $openParenthesis, $arguments) === false
-                || $this->hasPositionalArgument($arguments) === false) {
+            if ($this->hasExpandedArgumentList($tokens, $openParenthesis, $arguments) === false) {
+                continue;
+            }
+
+            if ($this->hasPositionalArgument($arguments) === false) {
                 continue;
             }
 
@@ -857,7 +870,14 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             $previous = $tokens->getPrevMeaningfulToken($index);
 
             if ($previous !== null
-                && $tokens[ $previous ]->isGivenKind([ T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION, T_FN, T_NEW ])) {
+                && $tokens[ $previous ]->isGivenKind([
+                    T_OBJECT_OPERATOR,
+                    T_NULLSAFE_OBJECT_OPERATOR,
+                    T_DOUBLE_COLON,
+                    T_FUNCTION,
+                    T_FN,
+                    T_NEW,
+                ])) {
                 continue;
             }
 
@@ -1285,7 +1305,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
      */
     private function hasExpandedArgumentList(Tokens $tokens, int $openParenthesis, array $arguments): bool
     {
-        if (count($arguments) < 2) {
+        if ($arguments === []) {
             return false;
         }
 
@@ -2447,7 +2467,10 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         $reflectionMethod = $this->reflectMethod($className, $method);
 
         if ($reflectionMethod !== null) {
-            return $this->resolveReflectedMethodReturnClass($reflectionMethod);
+
+            return $this->resolveReflectedMethodReturnClass($reflectionMethod)
+                ?? $this->resolveSessionDriverReturnClass($className, $reflectionMethod);
+
         }
 
         $magicMethod = $this->reflectMagicMethod($className, $method);
@@ -2458,6 +2481,25 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
                 type: $magicMethod[ 'returnType' ],
                 declaringClass: $magicMethod[ 'declaringClass' ],
             );
+    }
+
+    private function resolveSessionDriverReturnClass(string $className, ReflectionMethod $method): ?string
+    {
+        if (strtolower($method->getName()) !== 'driver') {
+            return null;
+        }
+
+        if (strcasecmp($className, 'Illuminate\\Session\\SessionManager') !== 0) {
+            return null;
+        }
+
+        if ($method->getDeclaringClass()->getName() !== 'Illuminate\\Support\\Manager') {
+            return null;
+        }
+
+        // SessionManager wraps built-in and custom drivers through buildSession().
+        // The inherited Manager::driver() PHPDoc only says mixed.
+        return $this->resolveMethodReturnClass($className, 'buildSession');
     }
 
     /**

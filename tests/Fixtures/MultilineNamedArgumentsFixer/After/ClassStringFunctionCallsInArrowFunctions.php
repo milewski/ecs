@@ -21,7 +21,7 @@ abstract class ClassStringFunctionCallsInArrowFunctions
          * @var RecordManager $record
          */
         return $this->saveCampaignConfiguration(
-            static fn (): RecordManager => app(RecordManager::class)->update(
+            callback: static fn (): RecordManager => app(RecordManager::class)->update(
                 record: $record,
                 data: LandingGroupData::fromFilament($data),
             ),
@@ -31,7 +31,7 @@ abstract class ClassStringFunctionCallsInArrowFunctions
     protected function handleRecordUpdateArrowFn(RecordManager $record, array $data): RecordManager
     {
         return $this->saveCampaignConfiguration(
-            fn (): RecordManager => app(RecordManager::class)->update(
+            callback: fn (): RecordManager => app(RecordManager::class)->update(
                 record: $record,
                 data: LandingGroupData::fromFilament($data),
             ),

@@ -14,7 +14,7 @@ final class PartiallyMultilineCalls
         ]);
 
         $this->singleArgument(
-            $values,
+            values: $values,
         );
     }
 

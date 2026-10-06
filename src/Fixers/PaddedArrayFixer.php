@@ -4,9 +4,15 @@ declare(strict_types = 1);
 
 namespace Milewski\ECS\Fixers;
 
+use Milewski\ECS\TokenAnalyzer\LineLengthAnalyzer;
 use PhpCsFixer\AbstractFixer;
+use PhpCsFixer\Fixer\ConfigurableFixerInterface;
+use PhpCsFixer\Fixer\ConfigurableFixerTrait;
 use PhpCsFixer\Fixer\IndentationTrait;
 use PhpCsFixer\Fixer\WhitespacesAwareFixerInterface;
+use PhpCsFixer\FixerConfiguration\FixerConfigurationResolver;
+use PhpCsFixer\FixerConfiguration\FixerConfigurationResolverInterface;
+use PhpCsFixer\FixerConfiguration\FixerOptionBuilder;
 use PhpCsFixer\FixerDefinition\CodeSample;
 use PhpCsFixer\FixerDefinition\FixerDefinition;
 use PhpCsFixer\FixerDefinition\FixerDefinitionInterface;
@@ -14,14 +20,15 @@ use PhpCsFixer\Tokenizer\CT;
 use PhpCsFixer\Tokenizer\Tokens;
 use SplFileInfo;
 
-final class PaddedArrayFixer extends AbstractFixer implements WhitespacesAwareFixerInterface
+final class PaddedArrayFixer extends AbstractFixer implements ConfigurableFixerInterface, WhitespacesAwareFixerInterface
 {
+    use ConfigurableFixerTrait;
     use IndentationTrait;
 
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Inline arrays have spaces inside their brackets. Multiline arrays place each element on its own line.',
+            summary: 'Inline arrays have spaces inside their brackets. Long and multiline arrays place each element on its own line.',
             codeSamples: [
                 new CodeSample("<?php\n\$sample = [ 1,2,3 ];"),
             ],
@@ -37,6 +44,17 @@ final class PaddedArrayFixer extends AbstractFixer implements WhitespacesAwareFi
     public function isCandidate(Tokens $tokens): bool
     {
         return $tokens->isAnyTokenKindsFound([ CT::T_ARRAY_SQUARE_BRACE_OPEN, T_VARIABLE ]);
+    }
+
+    protected function createConfigurationDefinition(): FixerConfigurationResolverInterface
+    {
+        return new FixerConfigurationResolver([
+            new FixerOptionBuilder('max_line_length', 'Expand arrays on lines longer than this limit.')
+                ->setAllowedTypes([ 'int' ])
+                ->setAllowedValues([ static fn (int $length): bool => $length > 0 ])
+                ->setDefault(140)
+                ->getOption(),
+        ]);
     }
 
     protected function applyFix(SplFileInfo $file, Tokens $tokens): void
@@ -70,7 +88,7 @@ final class PaddedArrayFixer extends AbstractFixer implements WhitespacesAwareFi
 
         }
 
-        if ($tokens->isPartialCodeMultiline($openingBracketIndex, $closingBracketIndex)) {
+        if ($this->shouldExpandArray($tokens, $openingBracketIndex, $closingBracketIndex)) {
 
             $this->expandArray($tokens, $openingBracketIndex, $closingBracketIndex);
 
@@ -97,6 +115,22 @@ final class PaddedArrayFixer extends AbstractFixer implements WhitespacesAwareFi
         if ($closingBracketIndex - $previousMeaningfulTokenIndex === 1) {
             $tokens->ensureWhitespaceAtIndex($previousMeaningfulTokenIndex, 1, ' ');
         }
+
+        $closingBracketIndex = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_ARRAY_SQUARE_BRACE, $openingBracketIndex);
+
+        if ($this->shouldExpandArray($tokens, $openingBracketIndex, $closingBracketIndex)) {
+            $this->expandArray($tokens, $openingBracketIndex, $closingBracketIndex);
+        }
+    }
+
+    private function shouldExpandArray(Tokens $tokens, int $openingBracketIndex, int $closingBracketIndex): bool
+    {
+        if ($tokens->isPartialCodeMultiline($openingBracketIndex, $closingBracketIndex)) {
+            return true;
+        }
+
+        return LineLengthAnalyzer::maximumLength($tokens, $openingBracketIndex, $closingBracketIndex)
+            > $this->configuration[ 'max_line_length' ];
     }
 
     private function expandArray(Tokens $tokens, int $openingBracketIndex, int $closingBracketIndex): void
@@ -110,17 +144,27 @@ final class PaddedArrayFixer extends AbstractFixer implements WhitespacesAwareFi
 
             $block = Tokens::detectBlockType($tokens[ $index ]);
 
-            if ($block !== null && $block[ 'isStart' ]) {
+            if ($block !== null) {
 
-                $index = $tokens->findBlockEnd($block[ 'type' ], $index);
+                if ($block[ 'isStart' ]) {
 
+                    $index = $tokens->findBlockEnd($block[ 'type' ], $index);
+
+                    continue;
+
+                }
+
+            }
+
+            if ($tokens[ $index ]->equals(',') === false) {
                 continue;
-
             }
 
-            if ($tokens[ $index ]->equals(',') && $tokens->getNextMeaningfulToken($index) !== $closingBracketIndex) {
-                $separators[] = $index;
+            if ($tokens->getNextMeaningfulToken($index) === $closingBracketIndex) {
+                continue;
             }
+
+            $separators[] = $index;
 
         }
 
@@ -131,15 +175,30 @@ final class PaddedArrayFixer extends AbstractFixer implements WhitespacesAwareFi
             $separator = $separators[ $index ];
             $first = $tokens->getNextNonWhitespace($separator);
 
-            if ($separator !== $openingBracketIndex && $tokens[ $first ]->isComment()
-                && str_starts_with($tokens[ $first ]->getContent(), '/*') === false
-                && $tokens->isPartialCodeMultiline($separator, $first) === false) {
+            if ($this->hasTrailingLineComment($tokens, $separator, $first, $openingBracketIndex)) {
                 $first = $tokens->getNextNonWhitespace($first);
             }
 
             $tokens->ensureWhitespaceAtIndex($first - 1, 1, $elementWhitespace);
 
         }
+    }
+
+    private function hasTrailingLineComment(Tokens $tokens, int $separator, int $first, int $openingBracketIndex): bool
+    {
+        if ($separator === $openingBracketIndex) {
+            return false;
+        }
+
+        if ($tokens[ $first ]->isComment() === false) {
+            return false;
+        }
+
+        if (\str_starts_with($tokens[ $first ]->getContent(), '/*')) {
+            return false;
+        }
+
+        return $tokens->isPartialCodeMultiline($separator, $first) === false;
     }
 
     private function fixVariable(Tokens $tokens, int $openingBracketIndex): void
