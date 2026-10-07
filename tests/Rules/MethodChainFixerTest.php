@@ -14,281 +14,6 @@ use SplFileInfo;
 
 final class MethodChainFixerTest extends FixerTestCase
 {
-    #[DataProvider('provideVariableWidths')]
-    public function test_variable_receivers_must_reach_the_first_parenthesis_to_stand_alone(string $variable, string $operator, string $method, string $indent, bool $canStandAlone): void
-    {
-        $input = "<?php\n" . $indent . $variable . "\n" . $indent . $indent . $operator . $method . "('message')\n"
-            . $indent . $indent . $operator . 'send();';
-
-        $expected = $canStandAlone ? $input : "<?php\n" . $indent . $variable . $operator . $method . "('message')\n"
-            . $indent . $indent . $operator . 'send();';
-
-        $whitespaces = new WhitespacesFixerConfig($indent);
-
-        $this->assertSame($expected, $this->fix($input, 120, $whitespaces));
-        $this->assertSame($expected, $this->fix($expected, 120, $whitespaces));
-    }
-
-    public static function provideVariableWidths(): array
-    {
-        return [
-            'short user example' => [ '$aaa', '->', 'body', '    ', false ],
-            'below body parenthesis' => [ '$aaaaaaaaa', '->', 'body', '    ', false ],
-            'at body parenthesis' => [ '$aaaaaaaaaa', '->', 'body', '    ', true ],
-            'above body parenthesis' => [ '$notification', '->', 'body', '    ', true ],
-            'longer method needs a wider receiver' => [ '$notification', '->', 'description', '    ', false ],
-            'shorter method accepts a narrower receiver' => [ '$aaaaaaa', '->', 'a', '    ', true ],
-            'nullsafe below parenthesis' => [ '$aaaaaaaaaa', '?->', 'body', '    ', false ],
-            'nullsafe at parenthesis' => [ '$aaaaaaaaaaa', '?->', 'body', '    ', true ],
-            'two space indentation below boundary' => [ '$aaaaaaa', '->', 'body', '  ', false ],
-            'two space indentation at boundary' => [ '$aaaaaaaa', '->', 'body', '  ', true ],
-            'tab indentation below boundary' => [ '$aaaaaaaaa', '->', 'body', "\t", false ],
-            'tab indentation at boundary' => [ '$aaaaaaaaaa', '->', 'body', "\t", true ],
-            'dynamic method name counts its width' => [ '$notification', '->', '$methodName', '    ', false ],
-        ];
-    }
-
-    public function test_wide_variables_start_newly_wrapped_chains_and_preserve_single_call_gaps(): void
-    {
-        $input = "<?php\n\$notification->body('message')->warning()->send();\n\$notification\n    ->body('message');";
-        $expected = "<?php\n\$notification\n    ->body('message')\n    ->warning()\n    ->send();\n\$notification\n    ->body('message');";
-
-        $this->assertSame($expected, $this->fix($input, 30));
-        $this->assertSame($expected, $this->fix($expected, 30));
-    }
-
-    #[DataProvider('provideReceiverLayouts')]
-    public function test_previously_wrapped_chains_join_the_first_call_to_the_receiver(string $receiver): void
-    {
-        $input = "<?php\n" . $receiver . "\n    ->first()\n    ->second();";
-        $expected = "<?php\n" . $receiver . "->first()\n    ->second();";
-
-        $this->assertSame($expected, $this->fix($input));
-        $this->assertSame($expected, $this->fix($expected));
-    }
-
-    public static function provideReceiverLayouts(): array
-    {
-        return [
-            'this' => [ '$this' ],
-            'local variable' => [ '$repository' ],
-            'array element' => [ '$repositories[\'primary\']' ],
-            'array index containing a call' => [ '$repositories[key()]' ],
-            'array index containing a property' => [ '$repositories[$profile->primaryKey]' ],
-            'grouped variable' => [ '($repository)' ],
-            'nested grouped variable' => [ '(($repository))' ],
-        ];
-    }
-
-    #[DataProvider('providePropertyReceivers')]
-    public function test_wrapped_property_chains_begin_after_the_receiver_expression(string $receiver): void
-    {
-        $input = "<?php\n" . $receiver . "->first()\n    ->second();";
-        $expected = "<?php\n" . $receiver . "\n    ->first()\n    ->second();";
-
-        $this->assertSame($expected, $this->fix($input));
-        $this->assertSame($expected, $this->fix($expected));
-    }
-
-    public static function providePropertyReceivers(): array
-    {
-        return [
-            'local variable property' => [ '$role->permissions' ],
-            'this property' => [ '$this->repository' ],
-            'nested property' => [ '$this->services->repository' ],
-            'nullsafe property' => [ '$role?->permissions' ],
-            'dynamic property' => [ '$role->$property' ],
-            'static property' => [ 'Registry::$permissions' ],
-            'property array element' => [ '$role->permissions[\'primary\']' ],
-            'grouped property' => [ '($role->permissions)' ],
-            'property after a factory' => [ 'getRole()->permissions' ],
-        ];
-    }
-
-    #[DataProvider('provideCallableFactories')]
-    public function test_grouped_callable_factories_start_the_wrapped_chain(string $receiver): void
-    {
-        $input = "<?php\n" . $receiver . "->first()\n    ->second();";
-        $expected = "<?php\n" . $receiver . "\n    ->first()\n    ->second();";
-
-        $this->assertSame($expected, $this->fix($input));
-        $this->assertSame($expected, $this->fix($expected));
-    }
-
-    public static function provideCallableFactories(): array
-    {
-        return [
-            'array callable' => [ '($callbacks[\'primary\']())' ],
-            'grouped array callable' => [ '(($callbacks[\'primary\'])())' ],
-        ];
-    }
-
-    #[DataProvider('provideExcludedContexts')]
-    public function test_control_headers_and_sprintf_preserve_their_chains(string $input): void
-    {
-        $input = "<?php\n" . $input;
-
-        $this->assertSame($input, $this->fix($input, 10));
-    }
-
-    public static function provideExcludedContexts(): array
-    {
-        return [
-            'if header' => [ 'if ($role->permissions->first()->all()) {}' ],
-            'foreach header' => [ 'foreach ($role->permissions->first()->all() as $permission) {}' ],
-            'sprintf arguments' => [ 'sprintf(\'Permissions: %s\', $role->permissions->first()->all());' ],
-        ];
-    }
-
-    public function test_a_wrapped_property_link_wraps_the_remaining_short_links(): void
-    {
-        $input = "<?php\n\$role->permissions\n    ->first()->second();";
-        $expected = "<?php\n\$role->permissions\n    ->first()\n    ->second();";
-
-        $this->assertSame($expected, $this->fix($input));
-        $this->assertSame($expected, $this->fix($expected));
-    }
-
-    public function test_nullsafe_property_and_method_operators_are_preserved(): void
-    {
-        $input = "<?php\n\$role?->permissions?->first()\n    ?->second();";
-        $expected = "<?php\n\$role?->permissions\n    ?->first()\n    ?->second();";
-
-        $this->assertSame($expected, $this->fix($input));
-        $this->assertSame($expected, $this->fix($expected));
-    }
-
-    #[DataProvider('provideSingleCallReceivers')]
-    public function test_a_single_method_call_joins_its_variable_receiver(string $receiver, string $operator): void
-    {
-        $input = "<?php\n" . $receiver . "\n    " . $operator . 'permissions();';
-        $expected = "<?php\n" . $receiver . $operator . 'permissions();';
-
-        $this->assertSame($expected, $this->fix($input));
-        $this->assertSame($expected, $this->fix($expected));
-    }
-
-    public static function provideSingleCallReceivers(): array
-    {
-        return [
-            'local variable' => [ '$role', '->' ],
-            'this' => [ '$this', '->' ],
-            'nullsafe variable' => [ '$role', '?->' ],
-            'grouped variable' => [ '($role)', '->' ],
-            'array element' => [ '$roles[\'primary\']', '->' ],
-        ];
-    }
-
-    public function test_single_receiver_comments_prevent_joining(): void
-    {
-        $input = "<?php\n\$role\n    // Explain permissions.\n    ->permissions();";
-
-        $this->assertSame($input, $this->fix($input));
-    }
-
-    public function test_ternary_property_chain_starts_after_the_property(): void
-    {
-        $input = <<<'PHP'
-        <?php
-        return $role === null ? $profile->permissions() : $role->permissions->whereIn('name', array_column(CrmPermission::cases(), 'value'))
-            ->pluck('name')
-            ->all();
-        PHP;
-
-        $expected = <<<'PHP'
-        <?php
-        return $role === null ? $profile->permissions() : $role->permissions
-            ->whereIn('name', array_column(CrmPermission::cases(), 'value'))
-            ->pluck('name')
-            ->all();
-        PHP;
-
-        $this->assertSame($expected, $this->fix($input));
-        $this->assertSame($expected, $this->fix($expected));
-    }
-
-    public function test_ternary_direct_methods_keep_the_first_call_with_the_variable(): void
-    {
-        $input = <<<'PHP'
-        <?php
-        return $role === null ? $profile->permissions() : $role
-            ->whereIn('name', array_column(CrmPermission::cases(), 'value'))
-            ->pluck('name')
-            ->all();
-        PHP;
-
-        $expected = <<<'PHP'
-        <?php
-        return $role === null ? $profile->permissions() : $role->whereIn('name', array_column(CrmPermission::cases(), 'value'))
-            ->pluck('name')
-            ->all();
-        PHP;
-
-        $this->assertSame($expected, $this->fix($input));
-        $this->assertSame($expected, $this->fix($expected));
-    }
-
-    public function test_an_existing_nullsafe_chain_keeps_its_first_call_inline(): void
-    {
-        $input = "<?php\n\$repository\n    ?->find(\$id)\n    ?->all();";
-        $expected = "<?php\n\$repository?->find(\$id)\n    ?->all();";
-
-        $this->assertSame($expected, $this->fix($input));
-        $this->assertSame($expected, $this->fix($expected));
-    }
-
-    public function test_comments_between_the_receiver_and_first_method_are_preserved(): void
-    {
-        $input = <<<'PHP'
-        <?php
-        $repository
-            // Explain the lookup.
-            ->find($id)
-            ->all();
-        $repository /* lookup */
-            ->find($id)
-            ->all();
-        PHP;
-
-        $this->assertSame($input, $this->fix($input));
-        $this->assertSame($input, $this->fix($input, 20));
-    }
-
-    public function test_first_calls_with_multiline_arguments_keep_the_receiver_inline(): void
-    {
-        $input = <<<'PHP'
-        <?php
-        $repo
-            ->find(
-                first: $first,
-                second: $second,
-            )
-            ->all();
-        PHP;
-
-        $expected = <<<'PHP'
-        <?php
-        $repo->find(
-                first: $first,
-                second: $second,
-            )
-            ->all();
-        PHP;
-
-        $this->assertSame($expected, $this->fix($input));
-        $this->assertSame($expected, $this->fix($expected));
-    }
-
-    public function test_existing_chains_are_repaired_with_tabs_and_crlf(): void
-    {
-        $input = "<?php\r\n\t\$repo\r\n\t\t->find(\$id)\r\n\t\t->all();\r\n";
-        $expected = "<?php\r\n\t\$repo->find(\$id)\r\n\t\t->all();\r\n";
-        $whitespaces = new WhitespacesFixerConfig("\t", "\r\n");
-
-        $this->assertSame($expected, $this->fix($input, 120, $whitespaces));
-        $this->assertSame($expected, $this->fix($expected, 120, $whitespaces));
-    }
-
     #[DataProvider('provideChains')]
     public function test_long_method_chains(string $input, string $expected): void
     {
@@ -308,15 +33,11 @@ final class MethodChainFixerTest extends FixerTestCase
             ],
             'nullsafe calls' => [
                 '$repository?->findMatchingRecords($criteria)?->map($callback)?->all()',
-                '$repository?->findMatchingRecords($criteria)' . "\n    " . '?->map($callback)' . "\n    " . '?->all()',
+                '$repository' . "\n    " . '?->findMatchingRecords($criteria)' . "\n    " . '?->map($callback)' . "\n    " . '?->all()',
             ],
             'static factory receiver' => [
                 'Repository::query()->findMatchingRecords($criteria)->all()',
                 'Repository::query()' . "\n    " . '->findMatchingRecords($criteria)' . "\n    " . '->all()',
-            ],
-            'function factory receiver' => [
-                'repository_factory()->findMatchingRecords($criteria)->all()',
-                'repository_factory()' . "\n    " . '->findMatchingRecords($criteria)' . "\n    " . '->all()',
             ],
             'grouped receiver' => [
                 '(Repository::query())->findMatchingRecords($criteria)->all()',
@@ -328,11 +49,11 @@ final class MethodChainFixerTest extends FixerTestCase
             ],
             'array element receiver' => [
                 '$repositories[\'primary\']->findMatchingRecords($criteria)->all()',
-                '$repositories[\'primary\']->findMatchingRecords($criteria)' . "\n    " . '->all()',
+                '$repositories[\'primary\']' . "\n    " . '->findMatchingRecords($criteria)' . "\n    " . '->all()',
             ],
             'dynamic method name' => [
                 '$repository->$methodWithALongName($criteria)->all()',
-                '$repository->$methodWithALongName($criteria)' . "\n    " . '->all()',
+                '$repository' . "\n    " . '->$methodWithALongName($criteria)' . "\n    " . '->all()',
             ],
             'nested short chain in callback' => [
                 '$repository->map(fn ($value) => $value->first()->second())->all()',
@@ -340,23 +61,23 @@ final class MethodChainFixerTest extends FixerTestCase
             ],
             'comments between calls' => [
                 '$repository->first($criteria) /* explain */ ->second()',
-                '$repository->first($criteria) /* explain */' . "\n    " . '->second()',
+                '$repository' . "\n    " . '->first($criteria) /* explain */' . "\n    " . '->second()',
             ],
             'property after final call' => [
                 '$repository->findMatchingRecords($criteria)->first()->value',
-                '$repository->findMatchingRecords($criteria)' . "\n    " . '->first()->value',
+                '$repository' . "\n    " . '->findMatchingRecords($criteria)' . "\n    " . '->first()->value',
             ],
             'assignment prefix exceeds the limit' => [
                 '$membershipWithALongName = $query->first()->last()',
-                '$membershipWithALongName = $query->first()' . "\n    " . '->last()',
+                '$membershipWithALongName = $query' . "\n    " . '->first()' . "\n    " . '->last()',
             ],
             'coalescing suffix exceeds the limit' => [
                 '$query->first()->last() ?? new MembershipFallbackWithALongName()',
-                '$query->first()' . "\n    " . '->last() ?? new MembershipFallbackWithALongName()',
+                '$query' . "\n    " . '->first()' . "\n    " . '->last() ?? new MembershipFallbackWithALongName()',
             ],
             'prefix and suffix exceed the limit' => [
                 '$membership = $query->first()->last() ?? new Membership()',
-                '$membership = $query->first()' . "\n    " . '->last() ?? new Membership()',
+                '$membership = $query' . "\n    " . '->first()' . "\n    " . '->last() ?? new Membership()',
             ],
         ];
     }
@@ -383,7 +104,7 @@ final class MethodChainFixerTest extends FixerTestCase
 
         $this->assertSame($input, $this->fix($input));
         $this->assertSame(
-            expected: "<?php\n" . str_replace('->last()', "\n    ->last()", $aboveLimit) . "\n",
+            expected: "<?php\n" . str_replace('->', "\n    ->", $aboveLimit) . "\n",
             actual: $this->fix("<?php\n" . $aboveLimit . "\n"),
         );
     }
@@ -391,7 +112,7 @@ final class MethodChainFixerTest extends FixerTestCase
     public function test_chain_wrapping_respects_indentation_and_line_endings(): void
     {
         $input = "<?php\r\n\t\$repository->findMatchingRecords(\$criteria)->all();\r\n";
-        $expected = "<?php\r\n\t\$repository->findMatchingRecords(\$criteria)\r\n\t\t->all();\r\n";
+        $expected = "<?php\r\n\t\$repository\r\n\t\t->findMatchingRecords(\$criteria)\r\n\t\t->all();\r\n";
 
         $this->assertSame($expected, $this->fix($input, 40, new WhitespacesFixerConfig("\t", "\r\n")));
     }
@@ -409,16 +130,10 @@ final class MethodChainFixerTest extends FixerTestCase
     {
         return [
             'inline constructor' => [ '        return new CustomerNotePageData(__CHAIN__, $hasMore);' ],
-            'expanded constructor' => [
-                "        return new CustomerNotePageData(\n            notes: __CHAIN__,\n            hasMore: \$hasMore,\n        );",
-            ],
-            'deeply indented constructor' => [
-                "                return new CustomerNotePageData(\n                    notes: __CHAIN__,\n                    hasMore: \$hasMore,\n                );",
-            ],
+            'expanded constructor' => [ "        return new CustomerNotePageData(\n            notes: __CHAIN__,\n            hasMore: \$hasMore,\n        );" ],
+            'deeply indented constructor' => [ "                return new CustomerNotePageData(\n                    notes: __CHAIN__,\n                    hasMore: \$hasMore,\n                );" ],
             'function argument' => [ '        consume(__CHAIN__, $hasMore);' ],
-            'named method argument' => [
-                "        \$receiver->consume(\n            notes: __CHAIN__,\n            hasMore: \$hasMore,\n        );",
-            ],
+            'named method argument' => [ "        \$receiver->consume(\n            notes: __CHAIN__,\n            hasMore: \$hasMore,\n        );" ],
         ];
     }
 
@@ -431,7 +146,7 @@ final class MethodChainFixerTest extends FixerTestCase
 
         $this->assertSame($input, $this->fix($input));
         $this->assertSame(
-            expected: "<?php\n        consume(" . str_replace('->all()', "\n            ->all()", $aboveLimit) . ', $other);',
+            expected: "<?php\n        consume(" . str_replace('->', "\n            ->", $aboveLimit) . ', $other);',
             actual: $this->fix("<?php\n        consume(" . $aboveLimit . ', $other);'),
         );
     }

@@ -8,66 +8,6 @@ use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class MultilineNamedArgumentsFixerTest extends EcsTestCase
 {
-    public function test_single_arguments_follow_the_line_width_and_throw_layout_with_the_default_preset(): void
-    {
-        $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';
-
-        $this->assertFixtureIsFixedTo(
-            inputFixture: $fixtureDirectory . '/Before/SingleArgumentCalls.php',
-            expectedFixture: $fixtureDirectory . '/After/SingleArgumentCalls.php',
-        );
-
-        $this->assertFixturePasses($fixtureDirectory . '/After/SingleArgumentCalls.php');
-    }
-
-    public function test_single_sprintf_constructor_argument_stays_inline_in_a_middleware_chain(): void
-    {
-        $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';
-
-        $this->assertFixtureIsFixedTo(
-            inputFixture: $fixtureDirectory . '/Before/ReportingJob.php',
-            expectedFixture: $fixtureDirectory . '/After/ReportingJob.php',
-        );
-
-        $this->assertFixturePasses($fixtureDirectory . '/After/ReportingJob.php');
-    }
-
-    public function test_pest_declarations_stay_inline_with_positional_arguments(): void
-    {
-        $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';
-
-        $this->assertFixtureIsFixedTo(
-            inputFixture: $fixtureDirectory . '/Before/PestTestDeclarations.php',
-            expectedFixture: $fixtureDirectory . '/After/PestTestDeclarations.php',
-        );
-
-        $this->assertFixturePasses($fixtureDirectory . '/After/PestTestDeclarations.php');
-    }
-
-    public function test_expression_arrays_function_wrappers_and_variable_widths_with_the_default_preset(): void
-    {
-        $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';
-
-        $this->assertFixtureIsFixedTo(
-            inputFixture: $fixtureDirectory . '/Before/ExpressionLayouts.php',
-            expectedFixture: $fixtureDirectory . '/After/ExpressionLayouts.php',
-        );
-
-        $this->assertFixturePasses($fixtureDirectory . '/After/ExpressionLayouts.php');
-    }
-
-    public function test_single_rate_limit_key_is_named_with_the_default_preset(): void
-    {
-        $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';
-
-        $this->assertFixtureIsFixedTo(
-            inputFixture: $fixtureDirectory . '/Before/RateLimit.php',
-            expectedFixture: $fixtureDirectory . '/After/RateLimit.php',
-        );
-
-        $this->assertFixturePasses($fixtureDirectory . '/After/RateLimit.php');
-    }
-
     public function test_newly_expanded_calls_receive_control_block_padding_in_one_pass(): void
     {
         $input = <<<'PHP'
@@ -320,7 +260,7 @@ final class MultilineNamedArgumentsFixerTest extends EcsTestCase
         );
     }
 
-    public function test_inline_first_calls_and_compact_single_arguments_are_preserved(): void
+    public function test_inline_first_and_single_argument_calls_are_left_unchanged(): void
     {
         $this->assertFixturePasses(
             fixture: __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer/Valid/PartiallyMultilineCalls.php',

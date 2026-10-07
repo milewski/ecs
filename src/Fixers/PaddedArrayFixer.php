@@ -4,17 +4,7 @@ declare(strict_types = 1);
 
 namespace Milewski\ECS\Fixers;
 
-use Milewski\ECS\TokenAnalyzer\BooleanExpressionAnalyzer;
-use Milewski\ECS\TokenAnalyzer\ControlStructureHeaderAnalyzer;
-use Milewski\ECS\TokenAnalyzer\LineLengthAnalyzer;
 use PhpCsFixer\AbstractFixer;
-use PhpCsFixer\Fixer\ConfigurableFixerInterface;
-use PhpCsFixer\Fixer\ConfigurableFixerTrait;
-use PhpCsFixer\Fixer\IndentationTrait;
-use PhpCsFixer\Fixer\WhitespacesAwareFixerInterface;
-use PhpCsFixer\FixerConfiguration\FixerConfigurationResolver;
-use PhpCsFixer\FixerConfiguration\FixerConfigurationResolverInterface;
-use PhpCsFixer\FixerConfiguration\FixerOptionBuilder;
 use PhpCsFixer\FixerDefinition\CodeSample;
 use PhpCsFixer\FixerDefinition\FixerDefinition;
 use PhpCsFixer\FixerDefinition\FixerDefinitionInterface;
@@ -22,27 +12,17 @@ use PhpCsFixer\Tokenizer\CT;
 use PhpCsFixer\Tokenizer\Token;
 use PhpCsFixer\Tokenizer\Tokens;
 use SplFileInfo;
-use SplObjectStorage;
 
-final class PaddedArrayFixer extends AbstractFixer implements ConfigurableFixerInterface, WhitespacesAwareFixerInterface
+final class PaddedArrayFixer extends AbstractFixer
 {
-    use ConfigurableFixerTrait;
-    use IndentationTrait;
-
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Inline arrays have spaces inside their brackets. Long and multiline arrays place each element on its own line.',
-            codeSamples: [
+            'Arrays should always have a space between start and ending brackets.',
+            [
                 new CodeSample("<?php\n\$sample = [ 1,2,3 ];"),
             ],
         );
-    }
-
-    public function getPriority(): int
-    {
-        // Expand after calls are wrapped, before array indentation and trailing commas.
-        return 30;
     }
 
     public function isCandidate(Tokens $tokens): bool
@@ -50,81 +30,36 @@ final class PaddedArrayFixer extends AbstractFixer implements ConfigurableFixerI
         return $tokens->isAnyTokenKindsFound([ CT::T_ARRAY_SQUARE_BRACE_OPEN, T_VARIABLE ]);
     }
 
-    protected function createConfigurationDefinition(): FixerConfigurationResolverInterface
-    {
-        return new FixerConfigurationResolver([
-            new FixerOptionBuilder('max_line_length', 'Expand arrays on lines longer than this limit.')
-                ->setAllowedTypes([ 'int' ])
-                ->setAllowedValues([ static fn (int $length): bool => $length > 0 ])
-                ->setDefault(140)
-                ->getOption(),
-        ]);
-    }
-
     protected function applyFix(SplFileInfo $file, Tokens $tokens): void
     {
-        $expressionArrays = $this->expressionArrays($tokens);
-
-        for ($index = 0; $index < $tokens->count(); $index++) {
+        for ($index = 0, $c = $tokens->count(); $index < $c; $index++) {
 
             if ($tokens[ $index ]->equals('[')) {
                 $this->fixVariable($tokens, $index);
             }
 
             if ($tokens[ $index ]->isGivenKind([ CT::T_ARRAY_SQUARE_BRACE_OPEN ])) {
-                $this->fixArray($tokens, $index, isset($expressionArrays[ $tokens[ $index ] ]) === false);
+                $this->fixArray($tokens, $index);
             }
 
         }
     }
 
-    /**
-     * @return SplObjectStorage<Token, null>
-     */
-    private function expressionArrays(Tokens $tokens): SplObjectStorage
+    private function fixArray(Tokens $tokens, int $openingBracketIndex): void
     {
-        $arrays = new SplObjectStorage();
-        $booleanExpressions = new BooleanExpressionAnalyzer($tokens);
-        $excludedUntil = -1;
-
-        foreach ($tokens as $index => $token) {
-
-            $headerEnd = ControlStructureHeaderAnalyzer::findEnd($tokens, $index);
-
-            if ($headerEnd !== null) {
-                $excludedUntil = \max($excludedUntil, $headerEnd);
-            }
-
-            if ($token->isGivenKind(CT::T_ARRAY_SQUARE_BRACE_OPEN) === false) {
-                continue;
-            }
-
-            if ($index <= $excludedUntil) {
-
-                $arrays[ $token ] = null;
-
-                continue;
-
-            }
-
-            if ($booleanExpressions->contains($token)) {
-                $arrays[ $token ] = null;
-            }
-
-        }
-
-        return $arrays;
-    }
-
-    private function fixArray(Tokens $tokens, int $openingBracketIndex, bool $canExpand): void
-    {
+        /**
+         * @var Token $openingBracket
+         * @var Token $closingBracket
+         */
+        $openingBracket = $tokens[ $openingBracketIndex ];
         $closingBracketIndex = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_ARRAY_SQUARE_BRACE, $openingBracketIndex);
-        $nextMeaningfulTokenIndex = $tokens->getNextMeaningfulToken($openingBracketIndex);
+        $closingBracket = $tokens[ $closingBracketIndex ];
+        $nextMeaningFulTokenIndex = $tokens->getNextMeaningfulToken($openingBracketIndex);
 
         /**
          * [    ] => []
          */
-        if ($closingBracketIndex === $tokens->getNextNonWhitespace($openingBracketIndex)) {
+        if ($closingBracketIndex === $nextMeaningFulTokenIndex) {
 
             $tokens->clearRange($openingBracketIndex + 1, $closingBracketIndex - 1);
 
@@ -132,30 +67,12 @@ final class PaddedArrayFixer extends AbstractFixer implements ConfigurableFixerI
 
         }
 
-        if ($canExpand === false) {
-
-            if ($this->compactExpressionArray($tokens, $openingBracketIndex, $closingBracketIndex) === false) {
-                return;
-            }
-
-        } else {
-
-            if ($this->shouldExpandArray($tokens, $openingBracketIndex, $closingBracketIndex)) {
-
-                $this->expandArray($tokens, $openingBracketIndex, $closingBracketIndex);
-
-                return;
-
-            }
-
-        }
-
         /**
          * [1,2,3] => [ 1,2,3]
          */
-        if ($nextMeaningfulTokenIndex - $openingBracketIndex === 1) {
+        if ($nextMeaningFulTokenIndex - $openingBracketIndex === 1) {
 
-            $tokens->ensureWhitespaceAtIndex($nextMeaningfulTokenIndex, 0, ' ');
+            $tokens->ensureWhitespaceAtIndex($nextMeaningFulTokenIndex, 0, ' ');
 
             $closingBracketIndex++;
 
@@ -164,138 +81,11 @@ final class PaddedArrayFixer extends AbstractFixer implements ConfigurableFixerI
         /**
          * [1,2,3] => [1,2,3 ]
          */
-        $previousMeaningfulTokenIndex = $tokens->getPrevMeaningfulToken($closingBracketIndex);
+        $previousMeaningFulTokenIndex = $tokens->getPrevMeaningfulToken($closingBracketIndex);
 
-        if ($closingBracketIndex - $previousMeaningfulTokenIndex === 1) {
-            $tokens->ensureWhitespaceAtIndex($previousMeaningfulTokenIndex, 1, ' ');
+        if ($closingBracketIndex - $previousMeaningFulTokenIndex === 1) {
+            $tokens->ensureWhitespaceAtIndex($previousMeaningFulTokenIndex, 1, ' ');
         }
-
-        if ($canExpand === false) {
-            return;
-        }
-
-        $closingBracketIndex = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_ARRAY_SQUARE_BRACE, $openingBracketIndex);
-
-        if ($this->shouldExpandArray($tokens, $openingBracketIndex, $closingBracketIndex)) {
-            $this->expandArray($tokens, $openingBracketIndex, $closingBracketIndex);
-        }
-    }
-
-    private function compactExpressionArray(Tokens $tokens, int $start, int $end): bool
-    {
-        for ($index = $start + 1; $index < $end; $index++) {
-
-            if ($tokens[ $index ]->isComment()) {
-                return false;
-            }
-
-            if ($tokens[ $index ]->equals('{')) {
-                return false;
-            }
-
-            if ($tokens[ $index ]->isWhitespace()) {
-                continue;
-            }
-
-            if (\preg_match('/\R/', $tokens[ $index ]->getContent()) === 1) {
-                return false;
-            }
-
-        }
-
-        $last = $tokens->getPrevMeaningfulToken($end);
-
-        if ($tokens[ $last ]->equals(',')) {
-            $tokens->clearRange($tokens->getPrevMeaningfulToken($last) + 1, $last);
-        }
-
-        for ($index = $start + 1; $index < $end; $index++) {
-
-            if ($tokens[ $index ]->isGivenKind(T_WHITESPACE)) {
-                $tokens[ $index ] = new Token([ T_WHITESPACE, ' ' ]);
-            }
-
-        }
-
-        return true;
-    }
-
-    private function shouldExpandArray(Tokens $tokens, int $openingBracketIndex, int $closingBracketIndex): bool
-    {
-        if ($tokens->isPartialCodeMultiline($openingBracketIndex, $closingBracketIndex)) {
-            return true;
-        }
-
-        return LineLengthAnalyzer::maximumLength($tokens, $openingBracketIndex, $closingBracketIndex)
-            > $this->configuration[ 'max_line_length' ];
-    }
-
-    private function expandArray(Tokens $tokens, int $openingBracketIndex, int $closingBracketIndex): void
-    {
-        $indentation = $this->getLineIndentation($tokens, $openingBracketIndex);
-        $lineEnding = $this->whitespacesConfig->getLineEnding();
-        $elementWhitespace = $lineEnding . $indentation . $this->whitespacesConfig->getIndent();
-        $separators = [ $openingBracketIndex ];
-
-        for ($index = $openingBracketIndex + 1; $index < $closingBracketIndex; $index++) {
-
-            $block = Tokens::detectBlockType($tokens[ $index ]);
-
-            if ($block !== null) {
-
-                if ($block[ 'isStart' ]) {
-
-                    $index = $tokens->findBlockEnd($block[ 'type' ], $index);
-
-                    continue;
-
-                }
-
-            }
-
-            if ($tokens[ $index ]->equals(',') === false) {
-                continue;
-            }
-
-            if ($tokens->getNextMeaningfulToken($index) === $closingBracketIndex) {
-                continue;
-            }
-
-            $separators[] = $index;
-
-        }
-
-        $tokens->ensureWhitespaceAtIndex($closingBracketIndex - 1, 1, $lineEnding . $indentation);
-
-        for ($index = count($separators) - 1; $index >= 0; $index--) {
-
-            $separator = $separators[ $index ];
-            $first = $tokens->getNextNonWhitespace($separator);
-
-            if ($this->hasTrailingLineComment($tokens, $separator, $first, $openingBracketIndex)) {
-                $first = $tokens->getNextNonWhitespace($first);
-            }
-
-            $tokens->ensureWhitespaceAtIndex($first - 1, 1, $elementWhitespace);
-
-        }
-    }
-
-    private function hasTrailingLineComment(Tokens $tokens, int $separator, int $first, int $openingBracketIndex): bool
-    {
-        if ($separator === $openingBracketIndex) {
-            return false;
-        }
-
-        if ($tokens[ $first ]->isComment() === false) {
-            return false;
-        }
-
-        if (\str_starts_with($tokens[ $first ]->getContent(), '/*')) {
-            return false;
-        }
-
-        return $tokens->isPartialCodeMultiline($separator, $first) === false;
     }
 
     private function fixVariable(Tokens $tokens, int $openingBracketIndex): void

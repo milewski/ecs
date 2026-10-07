@@ -5,7 +5,6 @@ declare(strict_types = 1);
 namespace Milewski\ECS\Fixers;
 
 use PhpCsFixer\AbstractFixer;
-use PhpCsFixer\Fixer\IndentationTrait;
 use PhpCsFixer\Fixer\WhitespacesAwareFixerInterface;
 use PhpCsFixer\FixerDefinition\FixerDefinition;
 use PhpCsFixer\FixerDefinition\FixerDefinitionInterface;
@@ -15,8 +14,6 @@ use SplFileInfo;
 
 final class ClassOpeningBracketFixer extends AbstractFixer implements WhitespacesAwareFixerInterface
 {
-    use IndentationTrait;
-
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
@@ -32,63 +29,33 @@ final class ClassOpeningBracketFixer extends AbstractFixer implements Whitespace
 
     protected function applyFix(SplFileInfo $file, Tokens $tokens): void
     {
-        for ($index = $tokens->count() - 1; $index >= 0; $index--) {
+        foreach ($tokens as $index => $token) {
 
-            if ($tokens[ $index ]->isGivenKind([ T_CLASS, T_INTERFACE, T_TRAIT ]) === false) {
-                continue;
+            if ($token->isGivenKind([ T_CLASS, T_INTERFACE, T_TRAIT ])) {
+
+                $openBracketsIndex = $tokens->getNextTokenOfKind($index, [ '{' ]);
+                $closeBracketsIndex = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_CURLY_BRACE, $openBracketsIndex);
+                $beforeOpenBracketToken = $tokens[ $openBracketsIndex + 1 ];
+                $beforeCloseBracketToken = $tokens[ $closeBracketsIndex - 1 ];
+                $openWhitespace = preg_replace('~\R+~', $this->whitespacesConfig->getLineEnding(), $beforeOpenBracketToken->getContent());
+                $closeWhitespace = preg_replace('~\R+~', $this->whitespacesConfig->getLineEnding(), $beforeCloseBracketToken->getContent());
+
+                if ($beforeOpenBracketToken->isWhitespace() && substr_count($beforeOpenBracketToken->getContent(), PHP_EOL) > 1) {
+                    $tokens[ $openBracketsIndex + 1 ] = new Token([ T_WHITESPACE, $openWhitespace ]);
+                }
+
+                if ($beforeCloseBracketToken->isWhitespace() && substr_count($beforeCloseBracketToken->getContent(), PHP_EOL) > 1) {
+                    $tokens[ $closeBracketsIndex - 1 ] = new Token([ T_WHITESPACE, $closeWhitespace ]);
+                }
+
+                $token = $tokens[ $openBracketsIndex - 1 ];
+
+                if (str_contains($token->getContent(), PHP_EOL) === false) {
+                    $tokens[ $openBracketsIndex - 1 ] = new Token([ T_WHITESPACE, PHP_EOL ]);
+                }
+
             }
 
-            $openBracketsIndex = $this->findOpeningBrace($tokens, $index);
-
-            if ($openBracketsIndex === null) {
-                continue;
-            }
-
-            $closeBracketsIndex = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_CURLY_BRACE, $openBracketsIndex);
-
-            $this->removeExtraBlankLines($tokens, $closeBracketsIndex - 1);
-            $this->removeExtraBlankLines($tokens, $openBracketsIndex + 1);
-
-            $indentation = $this->getLineIndentation($tokens, $index);
-
-            $tokens->ensureWhitespaceAtIndex(
-                index: $openBracketsIndex - 1,
-                indexOffset: 1,
-                whitespace: $this->whitespacesConfig->getLineEnding() . $indentation,
-            );
-
-        }
-    }
-
-    private function findOpeningBrace(Tokens $tokens, int $classIndex): ?int
-    {
-        for ($index = $classIndex + 1; $index < $tokens->count(); $index++) {
-
-            if ($tokens[ $index ]->equals('{')) {
-                return $index;
-            }
-
-            $block = Tokens::detectBlockType($tokens[ $index ]);
-
-            if ($block !== null && $block[ 'isStart' ]) {
-                $index = $tokens->findBlockEnd($block[ 'type' ], $index);
-            }
-
-        }
-
-        return null;
-    }
-
-    private function removeExtraBlankLines(Tokens $tokens, int $index): void
-    {
-        if ($tokens[ $index ]->isWhitespace() === false) {
-            return;
-        }
-
-        $lines = preg_split('/\R/', $tokens[ $index ]->getContent());
-
-        if (count($lines) > 2) {
-            $tokens[ $index ] = new Token([ T_WHITESPACE, $this->whitespacesConfig->getLineEnding() . end($lines) ]);
         }
     }
 }

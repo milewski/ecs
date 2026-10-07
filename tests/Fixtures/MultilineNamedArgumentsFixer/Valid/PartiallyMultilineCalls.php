@@ -13,7 +13,9 @@ final class PartiallyMultilineCalls
             '--force' => true,
         ]);
 
-        $this->singleArgument($values);
+        $this->singleArgument(
+            $values,
+        );
     }
 
     private function call(string $command, array $arguments): void

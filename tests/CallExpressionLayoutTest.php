@@ -8,19 +8,6 @@ use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class CallExpressionLayoutTest extends EcsTestCase
 {
-    public function test_grouped_billing_arguments_and_arrays_of_multiline_objects_are_expanded(): void
-    {
-        $this->assertFixtureIsFixedTo(
-            inputFixture: __DIR__ . '/Fixtures/CallExpressionLayout/Before/BillingScenarios.php',
-            expectedFixture: __DIR__ . '/Fixtures/CallExpressionLayout/After/BillingScenarios.php',
-        );
-    }
-
-    public function test_billing_layout_is_idempotent(): void
-    {
-        $this->assertFixturePasses(__DIR__ . '/Fixtures/CallExpressionLayout/After/BillingScenarios.php');
-    }
-
     public function test_sprintf_moves_onto_its_parent_argument_line(): void
     {
         $this->assertFixtureIsFixedTo(

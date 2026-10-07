@@ -30,7 +30,7 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Wrapped chains start with a property or factory expression. Short variable receivers keep their first method call on the same line.',
+            summary: 'Long chains of at least two method calls place each method on a separate line.',
             codeSamples: [
                 new CodeSample(
                     code: "<?php\n\$repository->findAllMatchingRecords(\$criteria)->map(\$callback)->all();\n",
@@ -79,30 +79,17 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
             }
 
-            if ($tokens[ $index ]->isObjectOperator() === false) {
-                continue;
-            }
-
-            if ($booleanExpressions->contains($tokens[ $index ])) {
-                continue;
-            }
-
-            if ($this->methodParentheses($tokens, $index) === null) {
-                continue;
-            }
-
-            if ($this->continuesMethodChain($tokens, $index)) {
+            if ($tokens[ $index ]->isObjectOperator() === false
+                || $booleanExpressions->contains($tokens[ $index ])
+                || $this->methodParentheses($tokens, $index) === null
+                || $this->continuesMethodChain($tokens, $index)) {
                 continue;
             }
 
             $operators = [];
             $cursor = $index;
 
-            while ($cursor !== null) {
-
-                if ($tokens[ $cursor ]->isObjectOperator() === false) {
-                    break;
-                }
+            while ($cursor !== null && $tokens[ $cursor ]->isObjectOperator()) {
 
                 $openParenthesis = $this->methodParentheses($tokens, $cursor);
 
@@ -116,129 +103,38 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
             }
 
-            $receiverStart = $this->receiverStart($tokens, $index);
-            $firstWrappedOperator = $this->receiverStartsChain($tokens, $receiverStart, $index) ? 0 : 1;
-
-            if ($firstWrappedOperator === 1) {
-                $this->joinFirstCallToReceiver($tokens, $index);
-            }
-
-            if (count($operators) < 2) {
+            if (count($operators) < 2 || $this->hasInlineLinks($tokens, $operators) === false) {
                 continue;
             }
 
+            $receiverStart = $this->receiverStart($tokens, $index);
             $indentation = $this->getLineIndentation($tokens, $receiverStart);
 
-            if ($this->hasWrappedLinks($tokens, $operators) === false) {
-
-                if ($this->lineLength($tokens, $receiverStart, $closeParenthesis) <= $this->configuration[ 'max_line_length' ]) {
-                    continue;
-                }
-
+            if ($this->lineLength($tokens, $receiverStart, $closeParenthesis) <= $this->configuration[ 'max_line_length' ]) {
+                continue;
             }
 
             $whitespace = $this->whitespacesConfig->getLineEnding()
                 . $indentation
                 . $this->whitespacesConfig->getIndent();
 
-            for ($operatorIndex = count($operators) - 1; $operatorIndex >= $firstWrappedOperator; $operatorIndex--) {
+            for ($operatorIndex = count($operators) - 1; $operatorIndex >= 0; $operatorIndex--) {
                 $tokens->ensureWhitespaceAtIndex($operators[ $operatorIndex ] - 1, 1, $whitespace);
             }
 
         }
     }
 
-    private function joinFirstCallToReceiver(Tokens $tokens, int $operator): void
-    {
-        $receiverEnd = $tokens->getPrevMeaningfulToken($operator);
-
-        for ($index = $receiverEnd + 1; $index < $operator; $index++) {
-
-            if ($tokens[ $index ]->isComment()) {
-                return;
-            }
-
-        }
-
-        $tokens->clearRange($receiverEnd + 1, $operator - 1);
-    }
-
-    private function receiverStartsChain(Tokens $tokens, int $start, int $operator): bool
-    {
-        if ($start === $tokens->getPrevMeaningfulToken($operator)) {
-
-            if ($tokens[ $start ]->isGivenKind(T_VARIABLE)) {
-
-                $name = $tokens->getNextMeaningfulToken($operator);
-                $indent = \str_replace("\t", '    ', $this->whitespacesConfig->getIndent());
-                $parenthesisColumn = strlen($indent)
-                    + strlen($tokens[ $operator ]->getContent())
-                    + strlen($tokens[ $name ]->getContent())
-                    + 1;
-
-                return strlen($tokens[ $start ]->getContent()) >= $parenthesisColumn;
-
-            }
-
-        }
-
-        for ($index = $start; $index < $operator; $index++) {
-
-            if ($tokens[ $index ]->isObjectOperator()) {
-                return true;
-            }
-
-            if ($tokens[ $index ]->isGivenKind(T_DOUBLE_COLON)) {
-                return true;
-            }
-
-            $block = Tokens::detectBlockType($tokens[ $index ]);
-
-            if ($block === null) {
-                continue;
-            }
-
-            if ($block[ 'isStart' ] === false) {
-                continue;
-            }
-
-            if ($tokens[ $index ]->equals('(') === false) {
-
-                $index = $tokens->findBlockEnd($block[ 'type' ], $index);
-
-                continue;
-
-            }
-
-            if ($index === $start) {
-                continue;
-            }
-
-            $previous = $tokens->getPrevMeaningfulToken($index);
-
-            if ($tokens[ $previous ]->isGivenKind([ T_STRING, T_VARIABLE, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE, T_STATIC, T_CLASS ])) {
-                return true;
-            }
-
-            if ($tokens[ $previous ]->equalsAny([ ')', ']' ])) {
-                return true;
-            }
-
-        }
-
-        return false;
-    }
-
     /**
      * @param list<int> $operators
      */
-    private function hasWrappedLinks(Tokens $tokens, array $operators): bool
+    private function hasInlineLinks(Tokens $tokens, array $operators): bool
     {
-        foreach ($operators as $operator) {
+        foreach (array_slice($operators, 1) as $operator) {
 
             $previous = $tokens->getPrevMeaningfulToken($operator);
 
-            if ($tokens->isPartialCodeMultiline($previous, $operator)) {
+            if ($tokens->isPartialCodeMultiline($previous, $operator) === false) {
                 return true;
             }
 

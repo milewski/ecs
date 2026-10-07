@@ -15,7 +15,7 @@ use SplFileInfo;
 final class SprintfArgumentLayoutTest extends FixerTestCase
 {
     #[DataProvider('provideSprintfCalls')]
-    public function test_sprintf_and_its_enclosing_call_follow_the_line_length_rule(string $input, string $expected): void
+    public function test_sprintf_stays_inline_and_parent_arguments_expand(string $input, string $expected): void
     {
         $input = "<?php\n" . $input . "\n";
         $expected = "<?php\n" . $expected . "\n";
@@ -29,65 +29,21 @@ final class SprintfArgumentLayoutTest extends FixerTestCase
         $longFormat = str_repeat('a', 150) . '%s';
 
         return [
-            'short free function wrapper' => [
-                "\$name = trim(sprintf('%s %s', \$lead->first_name, \$lead->last_name)) ?: 'Unnamed lead';",
-                "\$name = trim(sprintf('%s %s', \$lead->first_name, \$lead->last_name)) ?: 'Unnamed lead';",
-            ],
-            'previously expanded free function wrapper' => [
-                "unknown_call(\n    name: trim(\n        sprintf('%s %s', \$lead->first_name, \$lead->last_name),\n    ) ?: 'Unnamed lead',\n);",
-                "unknown_call(name: trim(sprintf('%s %s', \$lead->first_name, \$lead->last_name)) ?: 'Unnamed lead');",
-            ],
-            'qualified function wrapper' => [
-                "Custom\\normalize(\n    \\sprintf('%s', \$value),\n);",
-                "Custom\\normalize(\\sprintf('%s', \$value));",
-            ],
-            'explicitly named wrapper argument' => [
-                "trim(\n    string: sprintf('%s', \$value),\n);",
-                "trim(sprintf('%s', \$value));",
-            ],
-            'static method wrapper' => [
-                "Formatter::normalize(sprintf('%s', \$value));",
-                "Formatter::normalize(sprintf('%s', \$value));",
-            ],
-            'constructor wrapper' => [
-                "new Label(sprintf('%s', \$value));",
-                "new Label(sprintf('%s', \$value));",
-            ],
-            'previously expanded constructor wrapper' => [
-                "new Label(\n    sprintf('%s', \$value),\n);",
-                "new Label(sprintf('%s', \$value));",
-            ],
-            'previously expanded explicitly named constructor argument' => [
-                "new Label(\n    key: sprintf('%s', \$value),\n);",
-                "new Label(key: sprintf('%s', \$value));",
-            ],
-            'previously expanded nullsafe method argument' => [
-                "\$formatter?->normalize(\n    sprintf('%s', \$value),\n);",
-                "\$formatter?->normalize(sprintf('%s', \$value));",
-            ],
-            'dynamic function wrapper' => [
-                "\$normalize(sprintf('%s', \$value));",
-                "\$normalize(sprintf('%s', \$value));",
-            ],
-            'grouped sprintf is an expression' => [
-                "\$label = (\n    sprintf('%s', \$value)\n);",
-                "\$label = (\n    sprintf('%s', \$value)\n);",
-            ],
             'short nested sprintf' => [
                 '$limit->by(sprintf(\'crm-search:%s\', $userId));',
-                "\$limit->by(sprintf('crm-search:%s', \$userId));",
+                "\$limit->by(\n    sprintf('crm-search:%s', \$userId)\n);",
             ],
             'expanded nested sprintf' => [
                 "\$limit->by(sprintf(\n    'crm-search:%s',\n    \$request->user('crm')?->getAuthIdentifier(),\n));",
-                "\$limit->by(sprintf('crm-search:%s', \$request->user('crm')?->getAuthIdentifier()));",
+                "\$limit->by(\n    sprintf('crm-search:%s', \$request->user('crm')?->getAuthIdentifier())\n);",
             ],
             'fully qualified sprintf' => [
                 '$limit->by(\sprintf(\'%s\', $userId));',
-                "\$limit->by(\\sprintf('%s', \$userId));",
+                "\$limit->by(\n    \\sprintf('%s', \$userId)\n);",
             ],
             'named parent argument' => [
                 '$limit->by(key: sprintf(\'%s\', $userId));',
-                "\$limit->by(key: sprintf('%s', \$userId));",
+                "\$limit->by(\n    key: sprintf('%s', \$userId)\n);",
             ],
             'multiple parent arguments' => [
                 'unknown_call(sprintf(\'%s\', $userId), $other);',
@@ -109,101 +65,6 @@ final class SprintfArgumentLayoutTest extends FixerTestCase
                 "sprintf('%s', \$repository->findMatchingRecords(\$firstLongValue, \$secondLongValue)->first()->name());",
                 "sprintf('%s', \$repository->findMatchingRecords(\$firstLongValue, \$secondLongValue)->first()->name());",
             ],
-        ];
-    }
-
-    #[DataProvider('provideWrapperLengths')]
-    public function test_function_wrapper_length_includes_prefix_and_suffix(int $maximumLength, bool $fits): void
-    {
-        $compact = "<?php\n    \$label = trim(sprintf('%s', \$value)) ?: 'fallback';";
-        $expanded = "<?php\n    \$label = trim(\n        string: sprintf('%s', \$value)\n    ) ?: 'fallback';";
-        $expected = $fits ? $compact : $expanded;
-        $previouslyExpanded = "<?php\n    \$label = trim(\n        sprintf('%s', \$value),\n    ) ?: 'fallback';";
-
-        $this->assertSame($expected, $this->fix($compact, $maximumLength));
-        $this->assertSame(
-            expected: $fits ? $compact : str_replace("\$value)\n", "\$value),\n", $expanded),
-            actual: $this->fix($previouslyExpanded, $maximumLength),
-        );
-
-        $this->assertSame($expected, $this->fix($expected, $maximumLength));
-    }
-
-    public static function provideWrapperLengths(): array
-    {
-        $length = strlen("    \$label = trim(sprintf('%s', \$value)) ?: 'fallback';");
-
-        return [
-            'below limit' => [ $length + 1, true ],
-            'at limit' => [ $length, true ],
-            'above limit' => [ $length - 1, false ],
-        ];
-    }
-
-    #[DataProvider('provideSingleArgumentCallLengths')]
-    public function test_single_sprintf_argument_calls_wrap_only_above_the_complete_line_limit(string $callable, int $lengthOffset): void
-    {
-        $line = "    \$result = $callable(sprintf('%s', \$value)) ?? 'fallback';";
-        $input = "<?php\n" . $line;
-        $expanded = "<?php\n    \$result = $callable(\n        sprintf('%s', \$value)\n    ) ?? 'fallback';";
-        $maximumLength = strlen($line) + $lengthOffset;
-        $expected = $lengthOffset >= 0 ? $input : $expanded;
-
-        $this->assertSame($expected, $this->fix($input, $maximumLength));
-        $this->assertSame($expected, $this->fix($expanded, $maximumLength));
-        $this->assertSame($expected, $this->fix($expected, $maximumLength));
-    }
-
-    public static function provideSingleArgumentCallLengths(): array
-    {
-        $cases = [];
-        $callables = [
-            'constructor' => 'new Middleware',
-            'qualified constructor' => 'new \\Middleware',
-            'static method' => 'Middleware::make',
-            'instance method' => '$formatter->normalize',
-            'nullsafe method' => '$formatter?->normalize',
-            'variable callable' => '$normalize',
-            'array callable' => '$callbacks[\'normalize\']',
-        ];
-
-        foreach ($callables as $label => $callable) {
-
-            foreach ([ 'below limit' => 1, 'at limit' => 0, 'above limit' => -1 ] as $boundary => $offset) {
-                $cases[ $label . ' ' . $boundary ] = [ $callable, $offset ];
-            }
-
-        }
-
-        return $cases;
-    }
-
-    public function test_wrapper_compaction_uses_the_expanded_parent_layout_in_the_first_pass(): void
-    {
-        $input = "<?php\nunknown_call(name: trim(\n    sprintf('%s', \$value),\n) ?: 'fallback', other: sprintf('%s', \$anotherValue));";
-        $expected = "<?php\nunknown_call(\n    name: trim(sprintf('%s', \$value)) ?: 'fallback',\n    other: sprintf('%s', \$anotherValue)\n);";
-
-        $this->assertSame($expected, $this->fix($input, 60));
-        $this->assertSame($expected, $this->fix($expected, 60));
-    }
-
-    #[DataProvider('provideUnsafeWrappers')]
-    public function test_wrapper_comments_and_multiline_literals_are_preserved(string $input): void
-    {
-        $input = "<?php\n" . $input;
-
-        $this->assertSame($input, $this->fix($input));
-        $this->assertSame($input, $this->fix($this->fix($input)));
-    }
-
-    public static function provideUnsafeWrappers(): array
-    {
-        return [
-            'constructor comment' => [ "new Label(\n    // Explain the key.\n    sprintf('%s', \$value)\n);" ],
-            'method multiline string' => [ "\$formatter->normalize(\n    sprintf('first line\nsecond line %s', \$value)\n);" ],
-            'comment' => [ "unknown_wrapper(\n    // Explain the label.\n    sprintf('%s', \$value)\n);" ],
-            'multiline string' => [ "unknown_wrapper(\n    sprintf('first line\nsecond line %s', \$value)\n);" ],
-            'closure body' => [ "unknown_wrapper(\n    sprintf('%s', static function () {\n        return 'value';\n    })\n);" ],
         ];
     }
 
@@ -252,7 +113,7 @@ final class SprintfArgumentLayoutTest extends FixerTestCase
     public function test_sprintf_layout_respects_tabs_and_crlf(): void
     {
         $input = "<?php\r\n\t\$limit->by(sprintf(\r\n\t\t'%s',\r\n\t\t\$userId,\r\n\t));\r\n";
-        $expected = "<?php\r\n\t\$limit->by(sprintf('%s', \$userId));\r\n";
+        $expected = "<?php\r\n\t\$limit->by(\r\n\t\tsprintf('%s', \$userId)\r\n\t);\r\n";
         $tokens = Tokens::fromCode($input);
 
         foreach ([ new MethodChainFixer(), new MultilineNamedArgumentsFixer() ] as $fixer) {

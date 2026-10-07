@@ -45,35 +45,25 @@ return register_fixers([
 
 - Run the `./vendor/bin/ecs check --fix`
 
-## Long calls, arrays, and method chains
+## Long calls and method chains
 
-The default preset wraps calls when their line exceeds 140 characters. Each argument goes on its own line, and parameter names are added when they can be resolved safely, including long single-argument calls such as `Limit::perMinute(30)->by(key: ...)`. Single-argument calls stay compact and positional when the complete line fits, including indentation, the receiver, and trailing expressions. Previously expanded short calls are compacted, and existing names are removed only when they match the first non-variadic parameter. Comments, multiline argument values, and names that skip optional parameters keep their binding and layout. Existing lists with multiple arguments and line breaks before arguments or the closing parenthesis place each argument on a separate line, even below the length limit. Chains with at least two method calls wrap at 120 characters. Short variable receivers keep their first call on the same line, such as `$role->whereIn(...)`, including existing wrapped chains and single method calls. A bare variable can stand on its own line when its last character reaches the opening parenthesis of the first method on the next indented line: `$notification` can precede `->body(...)`, while `$aaa` stays with `->body(...)`. The method name, operator, and configured indentation determine this boundary; a tab counts as four spaces. Property receivers such as `$role->permissions` and factory receivers such as `Repository::query()` start the expression, with subsequent method calls on separate lines. Existing partly wrapped chains use the same layout, even below the length limit. Short inline calls and chains are preserved.
+The default preset wraps calls with two or more arguments when their line exceeds 140 characters. Each argument goes on its own line, and parameter names are added when they can be resolved safely. Chains with at least two method calls wrap at 120 characters, putting each method on its own line. Short calls, short chains, and compact argument groups in existing multiline calls are preserved.
 
-Single-argument `throw new Exception(...)` calls always expand without adding a parameter name. The message expression, including `sprintf(...)`, keeps its compact layout. Inside an `if` block, the multiline throw receives the usual blank lines before and after the statement.
+Control structure headers, including `if`, `elseif`, and loop conditions, are excluded from automatic wrapping. Calls and chains within boolean and comparison expressions also stay inline, regardless of length. Standalone chains count the whole line, including assignments and trailing expressions such as `?? new Model()`. Nested chains count their own expression, allowing a long constructor call to expand its arguments while keeping a short chain compact.
 
-Arrays on lines exceeding 140 characters expand with one element per line, including returned model casts. Multiline arrays also place each element on its own line, including arrays containing multiline constructor calls. Short inline arrays keep their compact layout. A call with inline arguments and a multiline nested value, such as `save($id, new SnapshotData(...))`, keeps its outer layout unless it exceeds the call wrapping limit.
+`sprintf(...)` keeps its format and values on one line, even above the limit. An enclosing call places that expression on its own argument line, including single-argument calls such as `by(sprintf(...))`. Existing comments and literal multiline strings are preserved.
 
-Control structure headers, including `if`, `elseif`, and loop conditions, are excluded from automatic wrapping. Calls, chains, and arrays within boolean and comparison expressions also stay inline, regardless of length. Arrays in control headers and `match` subjects stay inline too. Arrays in `match` arms follow the usual array width rules and preserve multiline scenario tables with one inline array per row. Previously flattened long scenario lists expand back into separate rows. Other previously expanded expression arrays are compacted when they contain no comments, multiline literals, or block bodies. Arrays in ordinary assignments, returns, and constructor arguments still follow the array wrapping limit. Standalone chains count the whole line, including assignments and trailing expressions such as `?? new Model()`. Nested chains count their own expression, allowing a long constructor call to expand its arguments while keeping a short chain compact.
-
-`sprintf(...)` keeps its format and values on one line, even above the limit. Calls with only that argument stay inline when the whole line fits within 140 characters, including indentation, names that must be preserved, and any trailing expression. This applies to functions, constructors, methods, and dynamic callables, such as `trim(sprintf(...))`, `new WithoutOverlapping(sprintf(...))`, and `by(sprintf(...))`. Longer calls expand their argument list and receive parameter names when those can be resolved safely. Previously expanded short wrappers are compacted too. Existing comments and literal multiline strings are preserved.
-
-Pest `test(...)` declarations keep the description and callback opening on the same line regardless of length. Previously expanded declarations are compacted, and `description:` and `closure:` names are removed when they match their positional order. Callback bodies, comments, and dataset chains retain their normal formatting. Methods and explicitly namespaced functions such as `Custom\test()` follow the ordinary call rules.
-
-All three rules accept a positive integer `max_line_length` option. To change the wrapping threshold in your `ecs.php` configuration:
+Both rules accept a positive integer `max_line_length` option. To change the wrapping threshold in your `ecs.php` configuration:
 
 ```php
 use Milewski\ECS\Fixers\MethodChainFixer;
 use Milewski\ECS\Fixers\MultilineNamedArgumentsFixer;
-use Milewski\ECS\Fixers\PaddedArrayFixer;
 use Milewski\ECS\ValueObject\SetList;
 
 return register_fixers([
     MethodChainFixer::class => [ 'max_line_length' => 120 ],
     MultilineNamedArgumentsFixer::class => [ 'max_line_length' => 140 ],
-    PaddedArrayFixer::class => [ 'max_line_length' => 140 ],
 ])->withSets([ SetList::MILEWSKI ]);
 ```
 
-Callbacks passed as a single argument stay compact when the complete line fits the call wrapping limit. Arguments whose parameter names are unavailable or whose binding depends on variadic parameters or unpacking are wrapped without changing their binding. Builder types assigned outside a conditional remain available inside its branches; typed `when` and `unless` callbacks that return the same builder preserve that type for resolving forwarded methods such as `whereRaw(sql: ..., bindings: ...)`.
-
-Laravel's inherited `SessionManager::driver()` uses the session builder's documented return type to resolve store calls such as `put(key: ..., value: ...)`, despite the inherited method's `mixed` return annotation. Unknown driver overrides and unrelated managers are left unresolved.
+Single argument callbacks stay compact. Arguments whose parameter names are unavailable or whose binding depends on variadic parameters or unpacking are wrapped without changing their binding. Builder types assigned outside a conditional remain available inside its branches; typed `when` and `unless` callbacks that return the same builder preserve that type for resolving forwarded methods such as `whereRaw(sql: ..., bindings: ...)`.

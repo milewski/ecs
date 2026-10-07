@@ -24,7 +24,7 @@ final class FunctionParameterLayoutFixer extends AbstractFixer implements Whites
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Named function body braces use separate lines. Simple named function parameters always use one line; constructors use multiline parameters with attributes on separate lines unless they have exactly one simple parameter and a non-empty body.',
+            summary: 'Named function body braces use separate lines. Simple named function parameters always use one line; constructors use multiline parameters unless they have exactly one parameter and a non-empty body.',
             codeSamples: [
                 new CodeSample("<?php\n\nfinal class Example\n{\n    public function __construct(public readonly string \$name)\n    {\n    }\n\n    public static function create(\n        string \$name,\n    ): self\n    {\n    }\n}\n"),
             ],
@@ -231,30 +231,6 @@ final class FunctionParameterLayoutFixer extends AbstractFixer implements Whites
             $openParenthesis,
             sprintf('%s%s', $lineEnding, $parameterIndentation),
         );
-
-        $closeParenthesis = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $openParenthesis);
-
-        for ($index = $closeParenthesis - 1; $index > $openParenthesis; $index--) {
-
-            $block = Tokens::detectBlockType($tokens[ $index ]);
-
-            if ($block === null || $block[ 'isStart' ]) {
-                continue;
-            }
-
-            if ($block[ 'type' ] === Tokens::BLOCK_TYPE_ATTRIBUTE) {
-
-                $this->setWhitespaceAfter(
-                    $tokens,
-                    $index,
-                    sprintf('%s%s', $lineEnding, $parameterIndentation),
-                );
-
-            }
-
-            $index = $tokens->findBlockStart($block[ 'type' ], $index);
-
-        }
     }
 
     private function setWhitespaceAfter(Tokens $tokens, int $index, string $content): void
