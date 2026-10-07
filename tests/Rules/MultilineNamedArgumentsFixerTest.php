@@ -15,12 +15,14 @@ use SplFileInfo;
 final class MultilineNamedArgumentsFixerTest extends FixerTestCase
 {
     #[DataProvider('provideSingleArgumentCalls')]
-    public function test_expanded_single_arguments_are_named(string $declaration, string $callable, string $value, string $name): void
+    public function test_single_arguments_stay_compact_and_positional(string $declaration, string $callable, string $value, string $name): void
     {
         $input = "<?php\n" . $declaration . sprintf("%s(\n    %s,\n);\n", $callable, $value);
-        $expected = "<?php\n" . $declaration . sprintf("%s(\n    %s: %s,\n);\n", $callable, $name, $value);
+        $named = "<?php\n" . $declaration . sprintf("%s(\n    %s: %s,\n);\n", $callable, $name, $value);
+        $expected = "<?php\n" . $declaration . sprintf("%s(%s);\n", $callable, $value);
 
         $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($named));
         $this->assertSame($expected, $this->fix($expected));
     }
 
@@ -50,13 +52,100 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
         ];
     }
 
-    public function test_named_single_argument_preserves_its_leading_comment(): void
+    #[DataProvider('provideSingleArgumentWidthBoundaries')]
+    public function test_single_argument_width_includes_indentation_prefix_and_suffix(int $offset): void
     {
-        $input = "<?php\nfunction consume(mixed \$value): void {}\nconsume(\n    /* Keep this explanation. */ \$payload,\n);\n";
-        $expected = str_replace('*/ $payload', '*/ value: $payload', $input);
+        $declaration = "<?php\nfunction consume(mixed \$value, bool \$optional = false): mixed {}\n";
+        $line = "    \$result = consume(\$payload) ?? 'fallback';";
+        $compact = $declaration . $line;
+        $expanded = $declaration . "    \$result = consume(\n        value: \$payload\n    ) ?? 'fallback';";
+        $named = $declaration . "    \$result = consume(value: \$payload) ?? 'fallback';";
+        $limit = strlen($line) + $offset;
+        $expected = $offset < 0 ? $expanded : $compact;
+
+        $this->assertSame($expected, $this->fix($compact, $limit));
+        $this->assertSame($expected, $this->fix($named, $limit));
+        $this->assertSame($expected, $this->fix($expanded, $limit));
+        $this->assertSame($expected, $this->fix($expected, $limit));
+    }
+
+    public static function provideSingleArgumentWidthBoundaries(): array
+    {
+        return [ 'below limit' => [ 1 ], 'at limit' => [ 0 ], 'above limit' => [ -1 ] ];
+    }
+
+    #[DataProvider('provideThrownConstructors')]
+    public function test_single_argument_throws_always_expand_without_argument_names(string $class): void
+    {
+        $input = "<?php\nthrow new $class(sprintf('Validated answer %s has no field metadata.', \$answerKey));";
+        $expected = "<?php\nthrow new $class(\n    sprintf('Validated answer %s has no field metadata.', \$answerKey)\n);";
+        $named = str_replace("\n    sprintf", "\n    message: sprintf", $expected);
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($named));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public static function provideThrownConstructors(): array
+    {
+        return [ 'imported exception' => [ 'LogicException' ], 'qualified exception' => [ '\\LogicException' ] ];
+    }
+
+    public function test_throw_expressions_expand_but_empty_constructors_and_other_throw_operands_are_preserved(): void
+    {
+        $input = "<?php\n\$value ?? throw new LogicException('Missing.');\nthrow new LogicException();\nthrow create_exception('Missing.');\nthrow \$exception;";
+        $expected = "<?php\n\$value ?? throw new LogicException(\n    'Missing.'\n);\nthrow new LogicException();\nthrow create_exception('Missing.');\nthrow \$exception;";
 
         $this->assertSame($expected, $this->fix($input));
         $this->assertSame($expected, $this->fix($expected));
+    }
+
+    #[DataProvider('provideMultilineSingleArguments')]
+    public function test_compaction_preserves_multiline_argument_values(string $value): void
+    {
+        $input = "<?php\nunknown_call(\n    $value,\n);";
+
+        $this->assertSame($input, $this->fix($input));
+        $this->assertSame($input, $this->fix($this->fix($input)));
+    }
+
+    public static function provideMultilineSingleArguments(): array
+    {
+        return [
+            'multiline array' => [ "[\n        1,\n        2,\n    ]" ],
+            'multiline nested call' => [ "nested(\n        1,\n        2\n    )" ],
+            'broken method chain' => [ "\$repository\n        ->find()\n        ->first()" ],
+            'block callback' => [ "static function () {\n        return true;\n    }" ],
+            'literal newline' => [ "'first line\nsecond line'" ],
+            'argument comment' => [ '/* Keep this explanation. */ $payload' ],
+        ];
+    }
+
+    public function test_removing_a_single_argument_name_preserves_comments_around_its_name_and_value(): void
+    {
+        $declaration = "<?php\nfunction consume(mixed \$value): void {}\n";
+        $input = $declaration . "consume(value /* Keep the name comment. */: /* Keep the value comment. */ \$payload);";
+        $expected = $declaration . "consume( /* Keep the name comment. */ /* Keep the value comment. */ \$payload);";
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public function test_single_argument_compaction_and_throw_wrapping_respect_tabs_and_crlf(): void
+    {
+        $input = "<?php\r\n\ttrim(\r\n\t\tstring: \$payload,\r\n\t);\r\n\tthrow new LogicException('Missing.');\r\n";
+        $expected = "<?php\r\n\ttrim(\$payload);\r\n\tthrow new LogicException(\r\n\t\t'Missing.'\r\n\t);\r\n";
+        $whitespaces = new WhitespacesFixerConfig("\t", "\r\n");
+
+        $this->assertSame($expected, $this->fix($input, 140, $whitespaces));
+        $this->assertSame($expected, $this->fix($expected, 140, $whitespaces));
+    }
+
+    public function test_single_argument_preserves_its_leading_comment_without_adding_a_name(): void
+    {
+        $input = "<?php\nfunction consume(mixed \$value): void {}\nconsume(\n    /* Keep this explanation. */ \$payload,\n);\n";
+        $this->assertSame($input, $this->fix($input));
+        $this->assertSame($input, $this->fix(str_replace('*/ $payload', '*/ value: $payload', $input)));
     }
 
     public function test_sprintf_argument_is_wrapped_and_named_when_the_line_exceeds_the_limit(): void
@@ -106,24 +195,30 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
     }
 
     #[DataProvider('provideUnsafeSingleArgumentCalls')]
-    public function test_single_argument_calls_keep_their_binding_when_names_are_unsafe(string $input): void
+    public function test_single_argument_calls_keep_their_binding_when_names_are_unsafe(string $input, string $expected): void
     {
         $input = "<?php\n" . $input;
+        $expected = "<?php\n" . $expected;
 
-        $this->assertSame($input, $this->fix($input));
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
     }
 
     public static function provideUnsafeSingleArgumentCalls(): array
     {
         return [
-            'unresolved function' => [ "unknown_call(\n    \$value,\n);\n" ],
-            'unresolved receiver' => [ "\$unknown->by(\n    \$value,\n);\n" ],
-            'variadic argument' => [ "function consume(mixed ...\$values): void {}\nconsume(\n    \$value,\n);\n" ],
-            'unpacked argument' => [ "function consume(mixed \$value): void {}\nconsume(\n    ...\$values,\n);\n" ],
-            'no arguments' => [ "function consume(): void {}\nconsume(\n);\n" ],
-            'inline single argument' => [ "function consume(mixed \$value): void {}\nconsume(\$payload);\n" ],
-            'first class callable' => [ "function consume(mixed \$value): void {}\n\$callback = consume(...);\n" ],
-            'multiline function declaration' => [ "function consume(\n    mixed \$value,\n): void {}\n" ],
+            'unresolved function' => [ "unknown_call(\n    \$value,\n);\n", "unknown_call(\$value);\n" ],
+            'unresolved receiver' => [ "\$unknown->by(\n    \$value,\n);\n", "\$unknown->by(\$value);\n" ],
+            'variadic argument' => [ "function consume(mixed ...\$values): void {}\nconsume(\n    \$value,\n);\n", "function consume(mixed ...\$values): void {}\nconsume(\$value);\n" ],
+            'unpacked argument' => [ "function consume(mixed \$value): void {}\nconsume(\n    ...\$values,\n);\n", "function consume(mixed \$value): void {}\nconsume(...\$values);\n" ],
+            'named variadic argument' => [ "function consume(mixed ...\$values): void {}\nconsume(values: \$payload);\n", "function consume(mixed ...\$values): void {}\nconsume(values: \$payload);\n" ],
+            'later optional parameter' => [ "function consume(mixed \$value = null, bool \$strict = false): void {}\nconsume(strict: true);\n", "function consume(mixed \$value = null, bool \$strict = false): void {}\nconsume(strict: true);\n" ],
+            'unresolved named argument' => [ "unknown_call(\n    value: \$payload,\n);\n", "unknown_call(value: \$payload);\n" ],
+            'no parameters' => [ "function consume(): void {}\nconsume(value: \$payload);\n", "function consume(): void {}\nconsume(value: \$payload);\n" ],
+            'no arguments' => [ "function consume(): void {}\nconsume(\n);\n", "function consume(): void {}\nconsume(\n);\n" ],
+            'inline single argument' => [ "function consume(mixed \$value): void {}\nconsume(\$payload);\n", "function consume(mixed \$value): void {}\nconsume(\$payload);\n" ],
+            'first class callable' => [ "function consume(mixed \$value): void {}\n\$callback = consume(...);\n", "function consume(mixed \$value): void {}\n\$callback = consume(...);\n" ],
+            'multiline function declaration' => [ "function consume(\n    mixed \$value,\n): void {}\n", "function consume(\n    mixed \$value,\n): void {}\n" ],
         ];
     }
 
@@ -358,7 +453,7 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
         unknown_function('a long indivisible literal which does not become shorter by putting the argument on a separate line');
         PHP;
 
-        $this->assertSame($input, $this->fix($input, 40));
+        $this->assertSame($input, $this->fix($input));
     }
 
     public function test_resolved_function_arguments_are_named_after_wrapping(): void

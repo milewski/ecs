@@ -97,9 +97,7 @@ final class PestTestDeclarationLayoutTest extends FixerTestCase
         $expected = <<<'PHP'
         <?php
         test('the callback body keeps the normal argument rules', function (): void {
-            trim(
-                string: $value,
-            );
+            trim($value);
         });
         PHP;
 

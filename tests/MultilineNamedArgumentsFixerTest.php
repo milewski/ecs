@@ -8,6 +8,18 @@ use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class MultilineNamedArgumentsFixerTest extends EcsTestCase
 {
+    public function test_single_arguments_follow_the_line_width_and_throw_layout_with_the_default_preset(): void
+    {
+        $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';
+
+        $this->assertFixtureIsFixedTo(
+            inputFixture: $fixtureDirectory . '/Before/SingleArgumentCalls.php',
+            expectedFixture: $fixtureDirectory . '/After/SingleArgumentCalls.php',
+        );
+
+        $this->assertFixturePasses($fixtureDirectory . '/After/SingleArgumentCalls.php');
+    }
+
     public function test_single_sprintf_constructor_argument_stays_inline_in_a_middleware_chain(): void
     {
         $fixtureDirectory = __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer';
@@ -308,7 +320,7 @@ final class MultilineNamedArgumentsFixerTest extends EcsTestCase
         );
     }
 
-    public function test_inline_first_and_already_named_single_argument_calls_are_left_unchanged(): void
+    public function test_inline_first_calls_and_compact_single_arguments_are_preserved(): void
     {
         $this->assertFixturePasses(
             fixture: __DIR__ . '/Fixtures/MultilineNamedArgumentsFixer/Valid/PartiallyMultilineCalls.php',

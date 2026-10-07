@@ -38,6 +38,8 @@ final class SessionDriverArgumentsTest extends FixerTestCase
             subject: $input,
         );
 
+        $expected = str_replace("driver(driver: 'array')", "driver('array')", $expected);
+
         $this->assertSame($expected, $this->fix($input));
         $this->assertSame($expected, $this->fix($expected));
     }

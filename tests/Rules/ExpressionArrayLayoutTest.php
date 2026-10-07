@@ -40,9 +40,6 @@ final class ExpressionArrayLayoutTest extends FixerTestCase
             'foreach header' => [ "foreach ($array as \$permission) {}" ],
             'switch header' => [ "switch (select($array)) {}" ],
             'match subject' => [ "\$value = match (select($array)) { default => null };" ],
-            'match arm condition' => [ "\$value = match (\$key) { select($array) => true, default => false };" ],
-            'match arm result' => [ "\$value = match (\$key) { default => $array };" ],
-            'nested match' => [ "\$value = match (\$key) { default => match (\$other) { default => $array } };" ],
             'nested array operands' => [ "return includes([ $array, [] ]) === true;" ],
         ];
     }
@@ -80,12 +77,63 @@ final class ExpressionArrayLayoutTest extends FixerTestCase
         );
         if (includes([ [ 'first permission', 'second permission' ] ])) {}
         $value = match ($key) {
-            default => [ 'first permission', 'second permission' ],
+            default => [
+                'first permission',
+                'second permission',
+            ],
         };
         PHP;
 
         $this->assertSame($expected, $this->fix($input));
         $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public function test_nested_and_adjacent_match_arms_preserve_multiline_arrays_without_affecting_subjects_or_following_conditions(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        $first = match (select([
+            'first',
+            'second',
+        ])) {
+            default => match ($key) {
+                default => [
+                    [ 'name' => 'valid', 'value' => 'California' ],
+                    [ 'name' => 'invalid', 'value' => 'Atlantis' ],
+                ],
+            },
+        };
+        $second = match ($key) {
+            default => [
+                'first',
+                'second',
+            ],
+        };
+        if (includes([
+            'first',
+            'second',
+        ])) {}
+        PHP;
+
+        $expected = str_replace(
+            [ "select([\n    'first',\n    'second',\n])", "includes([\n    'first',\n    'second',\n])" ],
+            [ "select([ 'first', 'second' ])", "includes([ 'first', 'second' ])" ],
+            $input,
+        );
+
+        $this->assertSame($expected, $this->fix($input, 140));
+        $this->assertSame($expected, $this->fix($expected, 140));
+    }
+
+    public function test_match_array_preservation_respects_tabs_and_crlf_and_pads_inline_rows(): void
+    {
+        $input = "<?php\r\n\t\$value = match (\$key) {\r\n\t\tdefault => [\r\n\t\t\t['first'],\r\n\t\t\t[],\r\n\t\t],\r\n\t};\r\n";
+        $expected = str_replace("['first']", "[ 'first' ]", $input);
+
+        $whitespaces = new WhitespacesFixerConfig("\t", "\r\n");
+
+        $this->assertSame($expected, $this->fix($input, 140, $whitespaces));
+        $this->assertSame($expected, $this->fix($expected, 140, $whitespaces));
     }
 
     #[DataProvider('provideUnsafeCompactions')]
@@ -131,7 +179,10 @@ final class ExpressionArrayLayoutTest extends FixerTestCase
             'other' => 1
         ];
         $items = [
-            match ($key) { default => [ 'first', 'second' ] },
+            match ($key) { default => [
+                'first',
+                'second'
+            ] },
             'other'
         ];
         PHP;
@@ -149,12 +200,12 @@ final class ExpressionArrayLayoutTest extends FixerTestCase
         $this->assertSame($expected, $this->fix($expected));
     }
 
-    private function fix(string $input): string
+    private function fix(string $input, int $limit = 30, ?WhitespacesFixerConfig $whitespaces = null): string
     {
         $tokens = Tokens::fromCode($input);
         $fixer = new PaddedArrayFixer();
-        $fixer->configure([ 'max_line_length' => 30 ]);
-        $fixer->setWhitespacesConfig(new WhitespacesFixerConfig());
+        $fixer->configure([ 'max_line_length' => $limit ]);
+        $fixer->setWhitespacesConfig($whitespaces ?? new WhitespacesFixerConfig());
         $fixer->fix(new SplFileInfo('fixture.php'), $tokens);
 
         return $tokens->generateCode();

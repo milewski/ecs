@@ -15,9 +15,7 @@ final class ExpressionLayouts
 
     public function profile(object $lead): ProfileData
     {
-        return new ProfileData(
-            name: trim(sprintf('%s %s', $lead->first_name, $lead->last_name)) ?: 'Unnamed lead',
-        );
+        return new ProfileData(name: trim(sprintf('%s %s', $lead->first_name, $lead->last_name)) ?: 'Unnamed lead');
     }
 
     public function notify(object $notification, object $aaa): void

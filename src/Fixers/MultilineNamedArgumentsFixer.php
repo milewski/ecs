@@ -94,7 +94,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Long calls are expanded onto multiple lines. Expanded calls place each argument on its own line and use named arguments when parameter names can be resolved safely.',
+            summary: 'Long calls are expanded and named when parameter names can be resolved safely. Single arguments stay compact and positional when the complete line fits. Single-argument throws are always expanded without names.',
             codeSamples: [
                 new CodeSample("<?php\n\njson_decode(\n    \$json,\n    true,\n    flags: JSON_THROW_ON_ERROR,\n);\n"),
             ],
@@ -131,7 +131,6 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         do {
 
-            $this->compactShortSprintfWrappers($tokens);
             $this->nameExpandedArguments($tokens);
 
         } while ($this->expandLongCalls($tokens));
@@ -233,7 +232,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         }
     }
 
-    private function compactShortSprintfWrappers(Tokens $tokens): void
+    private function compactSingleArgumentCalls(Tokens $tokens): void
     {
         for ($index = $tokens->count() - 1; $index > 0; $index--) {
 
@@ -241,27 +240,60 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
                 continue;
             }
 
+            if ($this->isCallArgumentList($tokens, $index) === false) {
+                continue;
+            }
+
             $end = $tokens->findBlockEnd(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $index);
+            $arguments = $this->inspectArguments($tokens, $index, $end);
 
-            if ($tokens->isPartialCodeMultiline($index, $end) === false) {
+            if (count($arguments) !== 1) {
                 continue;
             }
 
-            $arguments = $this->argumentRanges($tokens, $index, $end);
+            $argument = $arguments[ 0 ];
+            $canUsePosition = false;
 
-            if ($this->isSingleSprintfArgumentCall($tokens, $index, $arguments) === false) {
-                continue;
+            if ($argument[ 'name' ] !== null) {
+
+                $parameters = $this->resolveCallParameters($tokens, $index);
+
+                if (($parameters[ 0 ][ 'name' ] ?? null) === $argument[ 'name' ]) {
+
+                    if ($parameters[ 0 ][ 'variadic' ] === false) {
+                        $canUsePosition = true;
+                    }
+
+                }
+
             }
 
-            if ($this->canCompactCall($tokens, $index, $end) === false) {
+            if ($this->isThrownConstructorCall($tokens, $index)) {
+
+                if ($canUsePosition) {
+                    $this->removeArgumentName($tokens, $argument[ 'start' ]);
+                }
+
                 continue;
             }
 
             $compacted = clone $tokens;
 
+            if ($canUsePosition) {
+                $this->removeArgumentName($compacted, $argument[ 'start' ]);
+            }
+
             $this->compactCall($compacted, $index, $end);
 
             if (LineLengthAnalyzer::maximumLength($compacted, $index, $end) > $this->configuration[ 'max_line_length' ]) {
+                continue;
+            }
+
+            if ($canUsePosition) {
+                $this->removeArgumentName($tokens, $argument[ 'start' ]);
+            }
+
+            if ($this->canCompactSingleArgument($tokens, $index, $end) === false) {
                 continue;
             }
 
@@ -271,20 +303,37 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
     }
 
-    /**
-     * @param list<array{start: int, end: int}> $arguments
-     */
-    private function isSingleSprintfArgumentCall(Tokens $tokens, int $openParenthesis, array $arguments): bool
+    private function removeArgumentName(Tokens $tokens, int $name): void
     {
-        if (count($arguments) !== 1) {
-            return false;
+        $colon = $tokens->getNextMeaningfulToken($name);
+        $value = $tokens->getNextMeaningfulToken($colon);
+
+        $tokens->clearAt($name);
+        $tokens->clearAt($colon);
+
+        for ($index = $name + 1; $index < $value; $index++) {
+
+            if ($tokens[ $index ]->isComment()) {
+                return;
+            }
+
         }
 
-        if ($this->hasSprintfArgument($tokens, $arguments) === false) {
-            return false;
+        for ($index = $name + 1; $index < $value; $index++) {
+
+            if ($tokens[ $index ]->isWhitespace()) {
+                $tokens->clearAt($index);
+            }
+
         }
 
-        return $this->isCallArgumentList($tokens, $openParenthesis);
+        if ($tokens[ $name - 1 ]->isWhitespace()) {
+
+            $tokens[ $value - 1 ] = clone $tokens[ $name - 1 ];
+
+            $tokens->clearAt($name - 1);
+
+        }
     }
 
     private function compactSprintfCalls(Tokens $tokens): void
@@ -402,9 +451,61 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
     {
         for ($index = $start + 1; $index < $end; $index++) {
 
-            if ($tokens[ $index ]->isComment() || $tokens[ $index ]->equals('{')
-                || ($tokens[ $index ]->isWhitespace() === false && preg_match('/\R/', $tokens[ $index ]->getContent()) === 1)) {
+            if ($tokens[ $index ]->isComment()) {
                 return false;
+            }
+
+            if ($tokens[ $index ]->equals('{')) {
+                return false;
+            }
+
+            if ($tokens[ $index ]->isWhitespace() === false) {
+
+                if (\preg_match('/\R/', $tokens[ $index ]->getContent()) === 1) {
+                    return false;
+                }
+
+            }
+
+        }
+
+        return true;
+    }
+
+    private function canCompactSingleArgument(Tokens $tokens, int $start, int $end): bool
+    {
+        if ($this->canCompactCall($tokens, $start, $end) === false) {
+            return false;
+        }
+
+        for ($index = $start + 1; $index < $end; $index++) {
+
+            $block = Tokens::detectBlockType($tokens[ $index ]);
+
+            if ($block !== null) {
+
+                if ($block[ 'isStart' ]) {
+
+                    $blockEnd = $tokens->findBlockEnd($block[ 'type' ], $index);
+
+                    if ($tokens->isPartialCodeMultiline($index, $blockEnd)) {
+                        return false;
+                    }
+
+                    $index = $blockEnd;
+
+                    continue;
+
+                }
+
+            }
+
+            if ($tokens[ $index ]->isObjectOperator()) {
+
+                if ($tokens->isPartialCodeMultiline($tokens->getPrevMeaningfulToken($index), $index)) {
+                    return false;
+                }
+
             }
 
         }
@@ -453,32 +554,50 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
                 continue;
             }
 
+            $isSingleArgumentThrow = false;
+
+            if (count($arguments) === 1) {
+
+                $isSingleArgumentThrow = $this->isThrownConstructorCall($tokens, $index);
+
+                if ($isSingleArgumentThrow === false) {
+
+                    $next = $tokens->getNextMeaningfulToken($closeParenthesis);
+
+                    if ($next !== null) {
+
+                        if ($tokens[ $next ]->isObjectOperator()) {
+                            continue;
+                        }
+
+                    }
+
+                }
+
+            }
+
             $isExpanded = $this->hasArgumentLineBreak($tokens, $closeParenthesis, $arguments);
             $hasSprintfArgument = $this->hasSprintfArgument($tokens, $arguments);
             $hasBrokenChain = $this->hasBrokenChainArgument($tokens, $arguments);
 
             if ($isExpanded === false) {
 
-                if ($hasSprintfArgument) {
+                if ($isSingleArgumentThrow === false) {
 
-                    if ($this->isSingleSprintfArgumentCall($tokens, $index, $arguments)) {
+                    if (count($arguments) === 1) {
 
                         if (LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ]) {
                             continue;
                         }
 
-                    }
+                    } elseif ($hasSprintfArgument === false) {
 
-                } else {
+                        if ($hasBrokenChain === false) {
 
-                    if (count($arguments) < 2) {
-                        continue;
-                    }
+                            if (LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ]) {
+                                continue;
+                            }
 
-                    if ($hasBrokenChain === false) {
-
-                        if (LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ]) {
-                            continue;
                         }
 
                     }
@@ -513,6 +632,26 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         }
 
         return $changed;
+    }
+
+    private function isThrownConstructorCall(Tokens $tokens, int $openParenthesis): bool
+    {
+        $name = $tokens->getPrevMeaningfulToken($openParenthesis);
+
+        if ($this->isNameToken($tokens[ $name ]) === false) {
+            return false;
+        }
+
+        $className = $this->readQualifiedNameEndingAt($tokens, $name);
+        $new = $tokens->getPrevMeaningfulToken($className[ 'start' ]);
+
+        if ($tokens[ $new ]->isGivenKind(T_NEW) === false) {
+            return false;
+        }
+
+        $throw = $tokens->getPrevMeaningfulToken($new);
+
+        return $tokens[ $throw ]->isGivenKind(T_THROW);
     }
 
     private function hasTrailingLineComment(Tokens $tokens, int $start, int $first): bool
@@ -684,6 +823,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         $this->resolveClassNames();
         $this->pestThisTypes = $this->collectPestThisTypes($tokens);
         $this->collectCallableDeclarations($tokens);
+        $this->compactSingleArgumentCalls($tokens);
         $this->compactBooleanCalls($tokens);
 
         $openParentheses = [];
@@ -714,6 +854,22 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             }
 
             $arguments = $this->inspectArguments($tokens, $openParenthesis, $closeParenthesis);
+
+            if (count($arguments) === 1) {
+
+                if ($this->isThrownConstructorCall($tokens, $openParenthesis)) {
+                    continue;
+                }
+
+                $compacted = clone $tokens;
+
+                $this->compactCall($compacted, $openParenthesis, $closeParenthesis);
+
+                if (LineLengthAnalyzer::maximumLength($compacted, $openParenthesis, $closeParenthesis) <= $this->configuration[ 'max_line_length' ]) {
+                    continue;
+                }
+
+            }
 
             if ($this->hasExpandedArgumentList($tokens, $openParenthesis, $arguments) === false) {
                 continue;

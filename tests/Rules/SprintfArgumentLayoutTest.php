@@ -35,7 +35,7 @@ final class SprintfArgumentLayoutTest extends FixerTestCase
             ],
             'previously expanded free function wrapper' => [
                 "unknown_call(\n    name: trim(\n        sprintf('%s %s', \$lead->first_name, \$lead->last_name),\n    ) ?: 'Unnamed lead',\n);",
-                "unknown_call(\n    name: trim(sprintf('%s %s', \$lead->first_name, \$lead->last_name)) ?: 'Unnamed lead',\n);",
+                "unknown_call(name: trim(sprintf('%s %s', \$lead->first_name, \$lead->last_name)) ?: 'Unnamed lead');",
             ],
             'qualified function wrapper' => [
                 "Custom\\normalize(\n    \\sprintf('%s', \$value),\n);",
@@ -43,7 +43,7 @@ final class SprintfArgumentLayoutTest extends FixerTestCase
             ],
             'explicitly named wrapper argument' => [
                 "trim(\n    string: sprintf('%s', \$value),\n);",
-                "trim(string: sprintf('%s', \$value));",
+                "trim(sprintf('%s', \$value));",
             ],
             'static method wrapper' => [
                 "Formatter::normalize(sprintf('%s', \$value));",

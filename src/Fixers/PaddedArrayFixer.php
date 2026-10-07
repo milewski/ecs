@@ -92,16 +92,7 @@ final class PaddedArrayFixer extends AbstractFixer implements ConfigurableFixerI
             $headerEnd = ControlStructureHeaderAnalyzer::findEnd($tokens, $index);
 
             if ($headerEnd !== null) {
-
                 $excludedUntil = \max($excludedUntil, $headerEnd);
-
-                if ($token->isGivenKind(T_MATCH)) {
-
-                    $body = $tokens->getNextMeaningfulToken($headerEnd);
-                    $excludedUntil = \max($excludedUntil, $tokens->findBlockEnd(Tokens::BLOCK_TYPE_CURLY_BRACE, $body));
-
-                }
-
             }
 
             if ($token->isGivenKind(CT::T_ARRAY_SQUARE_BRACE_OPEN) === false) {

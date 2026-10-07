@@ -18,27 +18,19 @@ final class UnresolvableCalls
 {
     public function exercise(object $service, array $values): void
     {
-        unknown_function(
-            $values,
-        );
+        unknown_function($values);
 
-        $service->unknownMethod(
-            $values,
-        );
+        $service->unknownMethod($values);
 
-        UnknownFactory::make(
-            $values,
-        );
+        UnknownFactory::make($values);
 
         collect_values(
             'first',
             'second',
         );
 
-        merge_values(
-            ...$values,
-        );
+        merge_values(...$values);
 
-        merge_values(values: $values);
+        merge_values($values);
     }
 }
