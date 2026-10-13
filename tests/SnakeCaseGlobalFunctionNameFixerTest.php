@@ -12,7 +12,7 @@ final class SnakeCaseGlobalFunctionNameFixerTest extends EcsTestCase
     {
         $declaration = "<?php\n\ndeclare(strict_types = 1);\n\nfunction combineTicketInformation(string \$first, string \$second): void\n{\n}\n\n";
         $call = "combineTicketInformation('', 'value');";
-        $value = str_repeat('x', 119 - strlen($call));
+        $value = str_repeat('x', 139 - strlen($call));
         $input = $declaration . sprintf("combineTicketInformation('%s', 'value');\n", $value);
         $expected = str_replace('combineTicketInformation', 'combine_ticket_information', $declaration)
             . sprintf("combine_ticket_information(\n    first: '%s',\n    second: 'value',\n);\n", $value);

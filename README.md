@@ -1,4 +1,12 @@
-# Installation
+<p align="center">
+    <img src="assets/icon.png" alt="ECS code-formatting icon" width="160" height="160">
+</p>
+
+# Milewski ECS
+
+PHP coding-style configuration and custom fixers for Easy Coding Standard.
+
+## Installation
 
 
 - Add this repository to composer.json

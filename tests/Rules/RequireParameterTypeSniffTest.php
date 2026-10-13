@@ -5,9 +5,10 @@ declare(strict_types = 1);
 namespace Milewski\ECS\Tests\Rules;
 
 use Milewski\ECS\Tests\Support\EcsTestCase;
+use Symplify\EasyCodingStandard\Parallel\ValueObject\Bridge;
 use Symplify\EasyCodingStandard\SniffRunner\Application\SniffFileProcessor;
-use Symplify\EasyCodingStandard\SniffRunner\DataCollector\SniffMetadataCollector;
 use Symplify\EasyCodingStandard\SniffRunner\ValueObject\Error\CodingStandardError;
+use Symplify\EasyCodingStandard\ValueObject\Configuration;
 
 final class RequireParameterTypeSniffTest extends EcsTestCase
 {
@@ -23,16 +24,16 @@ final class RequireParameterTypeSniffTest extends EcsTestCase
         $errors = $this->processFixture(__DIR__ . '/../Fixtures/RequireParameterType/untyped_request.php');
         $parameterNames = [ '$method', '$absUrl', '$headers', '$params', '$hasFile', '$apiMode', '$maxNetworkRetries' ];
 
-        self::assertCount(count($parameterNames), $errors);
+        $this->assertCount(count($parameterNames), $errors);
 
         foreach ($errors as $index => $error) {
-            self::assertSame(sprintf(self::ERROR_MESSAGE, $parameterNames[ $index ]), $error->getMessage());
+            $this->assertSame(sprintf(self::ERROR_MESSAGE, $parameterNames[ $index ]), $error->getMessage());
         }
     }
 
     public function test_accepts_explicit_native_parameter_types(): void
     {
-        self::assertSame([], $this->processFixture(
+        $this->assertSame([], $this->processFixture(
             __DIR__ . '/../Fixtures/RequireParameterType/typed_request.php',
         ));
     }
@@ -43,14 +44,11 @@ final class RequireParameterTypeSniffTest extends EcsTestCase
     private function processFixture(string $fixture): array
     {
         $sniffFileProcessor = $this->make(SniffFileProcessor::class);
-        $sniffMetadataCollector = $this->make(SniffMetadataCollector::class);
 
-        self::assertNotEmpty($sniffFileProcessor->getCheckers(), 'The ECS configuration registered no sniffs.');
+        $this->assertNotEmpty($sniffFileProcessor->getCheckers(), 'The ECS configuration registered no sniffs.');
 
-        $sniffMetadataCollector->reset();
+        $result = $sniffFileProcessor->processFile($fixture, new Configuration(isFixer: false));
 
-        $sniffFileProcessor->processFileToString($fixture);
-
-        return $sniffMetadataCollector->getCodingStandardErrors();
+        return $result[Bridge::CODING_STANDARD_ERRORS] ?? [];
     }
 }
