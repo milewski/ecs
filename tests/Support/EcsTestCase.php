@@ -7,6 +7,7 @@ namespace Milewski\ECS\Tests\Support;
 use RuntimeException;
 use Symplify\EasyCodingStandard\FixerRunner\Application\FixerFileProcessor;
 use Symplify\EasyCodingStandard\Testing\PHPUnit\AbstractCheckerTestCase;
+use Symplify\EasyCodingStandard\ValueObject\Configuration;
 
 abstract class EcsTestCase extends AbstractCheckerTestCase
 {
@@ -55,7 +56,7 @@ abstract class EcsTestCase extends AbstractCheckerTestCase
         $input = $this->normalizeLineEndings($input);
         $expected = $this->normalizeLineEndings($expected);
 
-        self::assertNotEmpty($this->fixerFileProcessor->getCheckers(), 'The ECS configuration registered no fixers.');
+        $this->assertNotEmpty($this->fixerFileProcessor->getCheckers(), 'The ECS configuration registered no fixers.');
 
         $temporaryDirectory = sprintf(
             '%s/milewski-ecs-tests/%s',
@@ -79,9 +80,11 @@ abstract class EcsTestCase extends AbstractCheckerTestCase
 
         try {
 
-            self::assertSame(
+            $this->fixerFileProcessor->processFile($temporaryFile, new Configuration(isFixer: true));
+
+            $this->assertSame(
                 expected: $expected,
-                actual: $this->normalizeLineEndings($this->fixerFileProcessor->processFileToString($temporaryFile)),
+                actual: $this->normalizeLineEndings($this->readFixture($temporaryFile)),
             );
 
         } finally {

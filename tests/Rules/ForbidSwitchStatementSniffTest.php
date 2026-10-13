@@ -5,9 +5,10 @@ declare(strict_types = 1);
 namespace Milewski\ECS\Tests\Rules;
 
 use Milewski\ECS\Tests\Support\EcsTestCase;
+use Symplify\EasyCodingStandard\Parallel\ValueObject\Bridge;
 use Symplify\EasyCodingStandard\SniffRunner\Application\SniffFileProcessor;
-use Symplify\EasyCodingStandard\SniffRunner\DataCollector\SniffMetadataCollector;
 use Symplify\EasyCodingStandard\SniffRunner\ValueObject\Error\CodingStandardError;
+use Symplify\EasyCodingStandard\ValueObject\Configuration;
 
 final class ForbidSwitchStatementSniffTest extends EcsTestCase
 {
@@ -24,16 +25,16 @@ final class ForbidSwitchStatementSniffTest extends EcsTestCase
             __DIR__ . '/../Fixtures/ForbidSwitchStatement/switch_statements.php',
         );
 
-        self::assertCount(2, $errors);
+        $this->assertCount(2, $errors);
 
         foreach ($errors as $error) {
-            self::assertSame(self::ERROR_MESSAGE, $error->getMessage());
+            $this->assertSame(self::ERROR_MESSAGE, $error->getMessage());
         }
     }
 
     public function test_accepts_match_expressions(): void
     {
-        self::assertSame([], $this->processFixture(
+        $this->assertSame([], $this->processFixture(
             __DIR__ . '/../Fixtures/ForbidSwitchStatement/match_expression.php',
         ));
     }
@@ -44,14 +45,11 @@ final class ForbidSwitchStatementSniffTest extends EcsTestCase
     private function processFixture(string $fixture): array
     {
         $sniffFileProcessor = $this->make(SniffFileProcessor::class);
-        $sniffMetadataCollector = $this->make(SniffMetadataCollector::class);
 
-        self::assertNotEmpty($sniffFileProcessor->getCheckers(), 'The ECS configuration registered no sniffs.');
+        $this->assertNotEmpty($sniffFileProcessor->getCheckers(), 'The ECS configuration registered no sniffs.');
 
-        $sniffMetadataCollector->reset();
+        $result = $sniffFileProcessor->processFile($fixture, new Configuration(isFixer: false));
 
-        $sniffFileProcessor->processFileToString($fixture);
-
-        return $sniffMetadataCollector->getCodingStandardErrors();
+        return $result[Bridge::CODING_STANDARD_ERRORS] ?? [];
     }
 }

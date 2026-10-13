@@ -1,0 +1,11 @@
+Generated with the built-in GPT Image tool on 2026-10-13.
+Output: icon.png (transparent PNG)
+
+Use case: logo-brand
+Asset type: square repository icon for milewski/ecs, a PHP coding-style configuration and automatic code-formatting toolkit.
+Primary request: create one polished, distinctive icon that conveys neatly formatted source code. A strong pair of curly braces frames three clean horizontal code strokes with deliberate indentation, forming a cohesive mark. Keep the forms bold and legible at small sizes.
+Style/medium: crisp minimal flat graphic, restrained and professional, with balanced geometry and subtle depth only if it improves readability.
+Composition/framing: one centered standalone mark in a square, generous consistent outer spacing, no presentation mockup.
+Scene/backdrop: genuinely transparent outside the mark.
+Color palette: restrained PHP-inspired indigo with a small mint accent, sufficient contrast for light and dark README backgrounds.
+Constraints: no words, no letters, no watermark, no extra objects, no background rectangle, no fine decorative detail.
