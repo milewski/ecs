@@ -15,9 +15,6 @@ final class PointlessMixedPhpdocs
         return [];
     }
 
-    /**
-     * Hydrates a record from external data.
-     */
     public function hydrate(array $data): void
     {
     }
@@ -35,9 +32,6 @@ final class PointlessMixedPhpdocs
         return [];
     }
 
-    /**
-     * @param list<mixed> $values Values are ordered by priority.
-     */
     public function acceptDocumentedValues(array $values): void
     {
     }

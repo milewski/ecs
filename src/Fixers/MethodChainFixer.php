@@ -47,7 +47,7 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
     public function getPriority(): int
     {
-        // Break chains before long argument lists and indentation are formatted.
+
         return 32;
     }
 
@@ -171,7 +171,6 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
             if ($previous !== null && ($tokens[ $previous ]->isGivenKind([ T_STRING, T_VARIABLE, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE ]) || $tokens[ $previous ]->equalsAny([ ')', ']' ]))) {
 
-                // The enclosing call can wrap its arguments without expanding this short nested chain.
                 $lines = preg_split('/\R/', $tokens->generatePartialCode($start, $end));
 
                 return max(array_map(strlen(...), $lines));

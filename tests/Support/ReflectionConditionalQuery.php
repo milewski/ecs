@@ -16,10 +16,8 @@ final class ReflectionConditionalQuery
 
     /**
      * @template TWhenReturnType
-     *
      * @param callable($this, mixed): TWhenReturnType|null $callback
      * @param callable($this, mixed): TWhenReturnType|null $default
-     *
      * @return $this|TWhenReturnType
      */
     public function when(mixed $value = null, ?callable $callback = null, ?callable $default = null)
@@ -33,10 +31,8 @@ final class ReflectionConditionalQuery
 
     /**
      * @template TUnlessReturnType
-     *
      * @param callable($this, mixed): TUnlessReturnType|null $callback
      * @param callable($this, mixed): TUnlessReturnType|null $default
-     *
      * @return $this|TUnlessReturnType
      */
     public function unless(mixed $value = null, ?callable $callback = null, ?callable $default = null)

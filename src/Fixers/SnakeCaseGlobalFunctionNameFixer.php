@@ -59,7 +59,7 @@ final class SnakeCaseGlobalFunctionNameFixer extends AbstractFixer
 
     public function getPriority(): int
     {
-        // Finalize callable names before measuring call line lengths.
+
         return 45;
     }
 
@@ -138,7 +138,6 @@ final class SnakeCaseGlobalFunctionNameFixer extends AbstractFixer
      * @param array<Node> $statements
      * @param array<int, array{end: int, replacement: string}> $edits
      * @param array<int, true> $conflicts
-     *
      * @return array<string, array{new: string}>
      */
     private function collectFunctionRenames(array $statements, array &$edits, array &$conflicts): array
