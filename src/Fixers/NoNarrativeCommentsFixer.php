@@ -13,6 +13,7 @@ use PHPStan\PhpDocParser\Ast\NodeTraverser;
 use PHPStan\PhpDocParser\Ast\NodeVisitor\CloningVisitor;
 use PHPStan\PhpDocParser\Ast\PhpDoc\GenericTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\InvalidTagValueNode;
+use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocChildNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTextNode;
 use PHPStan\PhpDocParser\Lexer\Lexer;
@@ -70,6 +71,21 @@ final class NoNarrativeCommentsFixer extends AbstractFixer
                 if ($this->isMachineDirective($token->getContent())) {
 
                     $tokens[ $index ] = new Token([ T_COMMENT, $this->directiveMetadata($token->getContent()) ]);
+                    continue;
+
+                }
+
+                $comment = preg_replace('/^(?:\/\/|#|\/\*)/', '/**', $token->getContent()) ?? $token->getContent();
+
+                if (str_ends_with($comment, '*/') === false) {
+                    $comment .= ' */';
+                }
+
+                $metadata = $this->metadata($comment, $file);
+
+                if ($metadata !== '') {
+
+                    $tokens[ $index ] = new Token([ T_DOC_COMMENT, $metadata ]);
                     continue;
 
                 }
@@ -171,7 +187,7 @@ final class NoNarrativeCommentsFixer extends AbstractFixer
 
         }
 
-        if (array_any($annotations, static fn ($annotation): bool => $annotation instanceof PhpDocTagNode) === false) {
+        if (array_any($annotations, static fn (PhpDocChildNode $annotation): bool => $annotation instanceof PhpDocTagNode) === false) {
             return '';
         }
 

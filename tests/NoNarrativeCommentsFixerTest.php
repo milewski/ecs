@@ -139,6 +139,25 @@ final class NoNarrativeCommentsFixerTest extends EcsTestCase
         $this->assertSame($source, $this->fix($source));
     }
 
+    public function test_type_metadata_in_regular_comments_is_retained_without_prose(): void
+    {
+        $source = <<<'PHP'
+        <?php
+        // @var list<string> $values A narrative explanation.
+        $values = [];
+        /* @var \Illuminate\Support\Collection<int, object> $records A narrative explanation. */
+        $records = null;
+        PHP;
+
+        $fixed = $this->fix($source);
+
+        $this->assertStringContainsString('@var list<string> $values', $fixed);
+        $this->assertStringContainsString('@var \Illuminate\Support\Collection<int, object> $records', $fixed);
+        $this->assertStringNotContainsString('A narrative explanation.', $fixed);
+        $this->assertSame($this->executableTokens($source), $this->executableTokens($fixed));
+        $this->assertSame($fixed, $this->fix($fixed));
+    }
+
     private function fix(string $source): string
     {
         $tokens = Tokens::fromCode($source);
