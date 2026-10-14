@@ -34,7 +34,7 @@ return register_fixers([
     NoAlternativeSyntaxFixer::class => true,
     NoBreakCommentFixer::class => false,
     NoSuperfluousElseifFixer::class => true,
-    //        NoTrailingCommaInListCallFixer::class => true,
+
     NoUnneededControlParenthesesFixer::class => true,
     NoUnneededCurlyBracesFixer::class => true,
     NoUselessElseFixer::class => true,

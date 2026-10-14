@@ -36,8 +36,6 @@ use SplFileInfo;
 final class DescriptiveVariableNameFixer extends AbstractFixer
 {
     /**
-     * Types that do not carry enough meaning for a descriptive variable name.
-     *
      * @var list<string>
      */
     private const array IGNORED_TYPE_NAMES = [
@@ -53,8 +51,6 @@ final class DescriptiveVariableNameFixer extends AbstractFixer
     ];
 
     /**
-     * Generic class suffixes that describe the declaration rather than the value.
-     *
      * @var list<string>
      */
     private const array TYPE_SUFFIXES = [
@@ -89,7 +85,7 @@ final class DescriptiveVariableNameFixer extends AbstractFixer
 
     public function getPriority(): int
     {
-        // Resolve parameter names before calls are wrapped and converted to named arguments.
+
         return 50;
     }
 

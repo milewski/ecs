@@ -150,7 +150,6 @@ final class AutoImportClassesFixer extends AbstractFixer implements WhitespacesA
 
     /**
      * @param array<int, array<string, non-empty-string>> $candidates
-     *
      * @return array<int, array<non-empty-string, non-empty-string>>
      */
     private function createAliases(Tokens $tokens, array $candidates): array
@@ -198,7 +197,6 @@ final class AutoImportClassesFixer extends AbstractFixer implements WhitespacesA
 
     /**
      * @param array<string, true> $reservedIdentifiers
-     *
      * @return non-empty-string
      */
     private function createAlias(string $fullyQualifiedClass, array $reservedIdentifiers): string
@@ -318,7 +316,6 @@ final class AutoImportClassesFixer extends AbstractFixer implements WhitespacesA
 
     /**
      * @param array<int, array<non-empty-string, non-empty-string>> $aliases
-     *
      * @return array<int, array<non-empty-string, non-empty-string>>
      */
     private function findUsedAliases(Tokens $tokens, array $aliases): array

@@ -13,7 +13,6 @@ abstract class FixerTestCase extends TestCase
     {
         parent::setUpBeforeClass();
 
-        // Initialize ECS's scoped autoloader before using PHP-CS-Fixer classes directly.
         ECSConfig::configure();
     }
 }

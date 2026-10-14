@@ -12,6 +12,7 @@ use Milewski\ECS\Fixers\FunctionParameterLayoutFixer;
 use Milewski\ECS\Fixers\LaravelEmptyToBlankFixer;
 use Milewski\ECS\Fixers\MethodChainFixer;
 use Milewski\ECS\Fixers\MultilineNamedArgumentsFixer;
+use Milewski\ECS\Fixers\NoNarrativeCommentsFixer;
 use Milewski\ECS\Fixers\NoPointlessMixedPhpdocFixer;
 use Milewski\ECS\Fixers\PaddedArrayFixer;
 use Milewski\ECS\Fixers\PaddedBlockFixer;
@@ -38,6 +39,7 @@ return register_fixers(fixers: [
     MethodChainFixer::class => true,
     MultilineNamedArgumentsFixer::class => true,
     NoPointlessMixedPhpdocFixer::class => true,
+    NoNarrativeCommentsFixer::class => true,
     SnakeCaseGlobalFunctionNameFixer::class => true,
     ForbidSwitchStatementSniff::class => true,
     RequireParameterTypeSniff::class => true,

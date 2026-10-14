@@ -33,7 +33,7 @@ final class PaddedBlockFixer extends AbstractFixer implements WhitespacesAwareFi
 
     public function getPriority(): int
     {
-        // Apply padding after long calls have made previously compact blocks multiline.
+
         return -80;
     }
 
@@ -58,9 +58,6 @@ final class PaddedBlockFixer extends AbstractFixer implements WhitespacesAwareFi
 
             } else if ($token->isGivenKind([ T_FUNCTION ])) {
 
-                /**
-                 * Anonymous function
-                 */
                 if ($this->token($tokens, $tokens->getNextMeaningfulToken($index))->equals('(')) {
 
                     $this->fixBlock($tokens, $index);
@@ -87,14 +84,6 @@ final class PaddedBlockFixer extends AbstractFixer implements WhitespacesAwareFi
             return;
         }
 
-        /**
-         * public function name()
-         * {
-         *   •
-         *   // body
-         *   •
-         * }
-         */
         if ($this->countNewLines($tokens, $boundaries[ 0 ] + 1) > 1) {
             $this->removeLineAt($tokens, $boundaries[ 0 ] + 1);
         }
@@ -138,28 +127,6 @@ final class PaddedBlockFixer extends AbstractFixer implements WhitespacesAwareFi
             return null;
         }
 
-        /**
-         * if() {
-         *   •
-         *   return
-         *   •
-         * }
-         */
-        //        if ($this->token($tokens, $tokens->getNextMeaningfulToken($blockStartIndex))->isGivenKind(T_RETURN)) {
-        //
-        //            $this->unwrapNewLines($tokens, $blockStartIndex, $blockEndIndex);
-        //
-        //            return;
-        //
-        //        }
-
-        /**
-         * if/else/try/catch() {
-         *   •
-         *   // body
-         *   •
-         * }
-         */
         if ($this->countLinesBetween($tokens, $blockStartIndex + 1, $blockEndIndex - 1) === 2) {
 
             if ($this->isMultiLevelBlock($tokens, $blockStartIndex, $blockEndIndex) === false) {
@@ -172,22 +139,10 @@ final class PaddedBlockFixer extends AbstractFixer implements WhitespacesAwareFi
 
         }
 
-        /**
-         * if() {
-         *   •
-         *   // body
-         * }
-         */
         if ($this->countNewLines($tokens, $blockStartIndex + 1) !== 2) {
             $this->ensureWhitespaceAtIndex($tokens, $blockStartIndex + 1);
         }
 
-        /**
-         * if() {
-         *   // body
-         *   •
-         * }
-         */
         if ($this->countNewLines($tokens, $blockEndIndex - 1) !== 2) {
             $this->ensureWhitespaceAtIndex($tokens, $blockEndIndex - 1);
         }
@@ -254,9 +209,6 @@ final class PaddedBlockFixer extends AbstractFixer implements WhitespacesAwareFi
             $blockStart = $tokens->findBlockStart(Tokens::BLOCK_TYPE_PARENTHESIS_BRACE, $previous);
             $previous = $tokens->getPrevMeaningfulToken($blockStart);
 
-            /**
-             * else if vs elseif
-             */
             if ($this->token($tokens, $previous)->isGivenKind([ T_IF ])) {
                 $previous = $tokens->getPrevMeaningfulToken($previous);
             }
@@ -281,12 +233,6 @@ final class PaddedBlockFixer extends AbstractFixer implements WhitespacesAwareFi
 
         }
 
-        /**
-         * If body is empty
-         * public function name()
-         * {
-         * }
-         */
         if ($blockEndIndex - $blockStartIndex <= 2) {
             return null;
         }

@@ -103,7 +103,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
     public function getPriority(): int
     {
-        // Wrap before argument spacing, array indentation, trailing commas, and statement indentation.
+
         return 31;
     }
 
@@ -1266,7 +1266,6 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
     /**
      * @param list<array{start: int, end: int, name: string|null, unpacked: bool}> $arguments
      * @param list<array{name: string, variadic: bool}> $parameters
-     *
      * @return list<array{index: int, name: string}>|null
      */
     private function matchArgumentNames(array $arguments, array $parameters): ?array
@@ -2966,7 +2965,6 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
     /**
      * @param list<ReflectionParameter> $parameters
-     *
      * @return list<array{name: string, variadic: bool}>
      */
     private function reflectionParameters(array $parameters): array

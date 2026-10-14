@@ -59,7 +59,7 @@ The default preset wraps calls with two or more arguments when their line exceed
 
 Control structure headers, including `if`, `elseif`, and loop conditions, are excluded from automatic wrapping. Calls and chains within boolean and comparison expressions also stay inline, regardless of length. Standalone chains count the whole line, including assignments and trailing expressions such as `?? new Model()`. Nested chains count their own expression, allowing a long constructor call to expand its arguments while keeping a short chain compact.
 
-`sprintf(...)` keeps its format and values on one line, even above the limit. An enclosing call places that expression on its own argument line, including single-argument calls such as `by(sprintf(...))`. Existing comments and literal multiline strings are preserved.
+`sprintf(...)` keeps its format and values on one line, even above the limit. An enclosing call places that expression on its own argument line, including single-argument calls such as `by(sprintf(...))`. Literal multiline strings are preserved.
 
 Both rules accept a positive integer `max_line_length` option. To change the wrapping threshold in your `ecs.php` configuration:
 
@@ -75,3 +75,15 @@ return register_fixers([
 ```
 
 Single argument callbacks stay compact. Arguments whose parameter names are unavailable or whose binding depends on variadic parameters or unpacking are wrapped without changing their binding. Builder types assigned outside a conditional remain available inside its branches; typed `when` and `unless` callbacks that return the same builder preserve that type for resolving forwarded methods such as `whereRaw(sql: ..., bindings: ...)`.
+
+## Comment policy
+
+The default `SetList::MILEWSKI` preset enables `NoNarrativeCommentsFixer`.
+`ecs check` rejects narrative line/block comments and PHPDoc prose; `ecs check --fix`
+removes them. Write self-explanatory code and keep explanations in documentation.
+
+Structured PHPDoc remains available for collection generics, array shapes,
+templates, model mixins and other type metadata. Descriptions are removed from
+mixed PHPDoc blocks. Required PHPStan, Psalm, PHPCS, IDE and coverage directives
+remain functional. Invalid typed PHPDoc produces an error instead of deleting
+metadata. Comments inside string literals and formatter input fixtures are data.

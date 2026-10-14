@@ -16,7 +16,7 @@ return register_fixers([
     ArraySyntaxFixer::class => true,
     NoMultilineWhitespaceAroundDoubleArrowFixer::class => true,
     NormalizeIndexBraceFixer::class => true,
-    //        NoTrailingCommaInSinglelineArrayFixer::class => true,
+
     NoWhitespaceBeforeCommaInArrayFixer::class => true,
     TrimArraySpacesFixer::class => false,
     WhitespaceAfterCommaInArrayFixer::class => true,

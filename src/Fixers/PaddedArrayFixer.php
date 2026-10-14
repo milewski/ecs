@@ -56,9 +56,6 @@ final class PaddedArrayFixer extends AbstractFixer
         $closingBracket = $tokens[ $closingBracketIndex ];
         $nextMeaningFulTokenIndex = $tokens->getNextMeaningfulToken($openingBracketIndex);
 
-        /**
-         * [    ] => []
-         */
         if ($closingBracketIndex === $nextMeaningFulTokenIndex) {
 
             $tokens->clearRange($openingBracketIndex + 1, $closingBracketIndex - 1);
@@ -67,9 +64,6 @@ final class PaddedArrayFixer extends AbstractFixer
 
         }
 
-        /**
-         * [1,2,3] => [ 1,2,3]
-         */
         if ($nextMeaningFulTokenIndex - $openingBracketIndex === 1) {
 
             $tokens->ensureWhitespaceAtIndex($nextMeaningFulTokenIndex, 0, ' ');
@@ -78,9 +72,6 @@ final class PaddedArrayFixer extends AbstractFixer
 
         }
 
-        /**
-         * [1,2,3] => [1,2,3 ]
-         */
         $previousMeaningFulTokenIndex = $tokens->getPrevMeaningfulToken($closingBracketIndex);
 
         if ($closingBracketIndex - $previousMeaningFulTokenIndex === 1) {
@@ -90,16 +81,11 @@ final class PaddedArrayFixer extends AbstractFixer
 
     private function fixVariable(Tokens $tokens, int $openingBracketIndex): void
     {
-        /**
-         * $data[]
-         */
+
         if ($tokens[ $openingBracketIndex + 1 ]->equals(']')) {
             return;
         }
 
-        /**
-         * $data[0] => $data[ 0]
-         */
         $tokens->ensureWhitespaceAtIndex($openingBracketIndex + 1, 0, ' ');
 
         while (true) {
@@ -112,9 +98,6 @@ final class PaddedArrayFixer extends AbstractFixer
 
             if ($current->equals(']')) {
 
-                /**
-                 * $data[0] => $data[0 ]
-                 */
                 if (!$tokens[ $openingBracketIndex - 2 ]->isWhitespace()) {
                     $tokens->ensureWhitespaceAtIndex($openingBracketIndex - 1, 0, ' ');
                 }
