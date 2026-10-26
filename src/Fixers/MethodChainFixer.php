@@ -19,6 +19,7 @@ use PhpCsFixer\FixerConfiguration\FixerOptionBuilder;
 use PhpCsFixer\FixerDefinition\CodeSample;
 use PhpCsFixer\FixerDefinition\FixerDefinition;
 use PhpCsFixer\FixerDefinition\FixerDefinitionInterface;
+use PhpCsFixer\Tokenizer\Token;
 use PhpCsFixer\Tokenizer\Tokens;
 use SplFileInfo;
 
@@ -30,7 +31,7 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Long chains of at least two method calls place each method on a separate line.',
+            summary: 'Method chains have no blank lines between links. Long chains of at least two method calls place each method on a separate line.',
             codeSamples: [
                 new CodeSample(
                     code: "<?php\n\$repository->findAllMatchingRecords(\$criteria)->map(\$callback)->all();\n",
@@ -64,6 +65,8 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
     protected function applyFix(SplFileInfo $file, Tokens $tokens): void
     {
+        $this->removeBlankLinesBetweenLinks($tokens);
+
         $booleanExpressions = new BooleanExpressionAnalyzer($tokens);
 
         for ($index = 1; $index < $tokens->count(); $index++) {
@@ -121,6 +124,34 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
             for ($operatorIndex = count($operators) - 1; $operatorIndex >= 0; $operatorIndex--) {
                 $tokens->ensureWhitespaceAtIndex($operators[ $operatorIndex ] - 1, 1, $whitespace);
             }
+
+        }
+    }
+
+    private function removeBlankLinesBetweenLinks(Tokens $tokens): void
+    {
+        for ($index = 1; $index < $tokens->count(); $index++) {
+
+            if ($tokens[ $index ]->isObjectOperator() === false) {
+                continue;
+            }
+
+            $whitespace = $index - 1;
+
+            if ($tokens[ $whitespace ]->isWhitespace() === false) {
+                continue;
+            }
+
+            $content = $tokens[ $whitespace ]->getContent();
+
+            if (substr_count($content, "\n") < 2) {
+                continue;
+            }
+
+            $tokens[ $whitespace ] = new Token([
+                T_WHITESPACE,
+                preg_replace('/(\R)(?:\h*\R)+/', '$1', $content),
+            ]);
 
         }
     }

@@ -55,7 +55,7 @@ return register_fixers([
 
 ## Long calls and method chains
 
-The default preset wraps calls with two or more arguments when their line exceeds 140 characters. Each argument goes on its own line, and parameter names are added when they can be resolved safely. Chains with at least two method calls wrap at 120 characters, putting each method on its own line. Short calls, short chains, and compact argument groups in existing multiline calls are preserved.
+The default preset wraps calls with two or more arguments when their line exceeds 140 characters. Each argument goes on its own line, and parameter names are added when they can be resolved safely. Chains with at least two method calls wrap at 120 characters, putting each method on its own line. Blank lines between chain links are removed, including in short and already multiline chains. Short calls, short chains, and compact argument groups in existing multiline calls are otherwise preserved.
 
 Control structure headers, including `if`, `elseif`, and loop conditions, are excluded from automatic wrapping. Calls and chains within boolean and comparison expressions also stay inline, regardless of length. Standalone chains count the whole line, including assignments and trailing expressions such as `?? new Model()`. Nested chains count their own expression, allowing a long constructor call to expand its arguments while keeping a short chain compact.
 
