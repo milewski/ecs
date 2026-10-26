@@ -8,6 +8,19 @@ use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class MethodChainFixerTest extends EcsTestCase
 {
+    public function test_abandoned_cart_query_chain_has_no_blank_lines_between_filters(): void
+    {
+        $this->assertFixtureIsFixedTo(
+            inputFixture: __DIR__ . '/Fixtures/MethodChainFixer/Before/AbandonedCartQuery.php',
+            expectedFixture: __DIR__ . '/Fixtures/MethodChainFixer/After/AbandonedCartQuery.php',
+        );
+    }
+
+    public function test_abandoned_cart_query_output_is_idempotent(): void
+    {
+        $this->assertFixturePasses(__DIR__ . '/Fixtures/MethodChainFixer/After/AbandonedCartQuery.php');
+    }
+
     public function test_long_chains_and_constructors_in_typed_arrow_callbacks_are_expanded(): void
     {
         $this->assertFixtureIsFixedTo(

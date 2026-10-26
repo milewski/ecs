@@ -117,6 +117,51 @@ final class MethodChainFixerTest extends FixerTestCase
         $this->assertSame($expected, $this->fix($input, 40, new WhitespacesFixerConfig("\t", "\r\n")));
     }
 
+    #[DataProvider('provideChainSpacing')]
+    public function test_chain_links_have_no_blank_lines(string $input, string $expected): void
+    {
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public static function provideChainSpacing(): array
+    {
+        return [
+            'short query chain' => [
+                "<?php\n\$query\n    ->whereNull('sent_at')\n\n    ->get();\n",
+                "<?php\n\$query\n    ->whereNull('sent_at')\n    ->get();\n",
+            ],
+            'single method after static factory' => [
+                "<?php\nQuery::create()\n\n    ->get();\n",
+                "<?php\nQuery::create()\n    ->get();\n",
+            ],
+            'nullsafe links and whitespace-only lines' => [
+                "<?php\n\$query\n \t\n\n    ?->first()\n \n    ?->value;\n",
+                "<?php\n\$query\n    ?->first()\n    ?->value;\n",
+            ],
+            'callback chain inside a condition' => [
+                "<?php\nif (\$query->where(fn (\$nested) => \$nested\n\n    ->active())\n\n    ->exists()) {}\n",
+                "<?php\nif (\$query->where(fn (\$nested) => \$nested\n    ->active())\n    ->exists()) {}\n",
+            ],
+            'inline links and separate statements' => [
+                "<?php\n\$query->first()->value;\n\n\$other->get();\n",
+                "<?php\n\$query->first()->value;\n\n\$other->get();\n",
+            ],
+            'comments and literal newlines' => [
+                "<?php\n\$query->where('notes', \"first\n\nlast\")\n    // Keep this filter.\n    ->get();\n",
+                "<?php\n\$query->where('notes', \"first\n\nlast\")\n    // Keep this filter.\n    ->get();\n",
+            ],
+        ];
+    }
+
+    public function test_chain_spacing_preserves_crlf_and_tab_indentation(): void
+    {
+        $input = "<?php\r\n\$query\r\n\r\n\t->first()\r\n\t\r\n\t->all();\r\n";
+        $expected = "<?php\r\n\$query\r\n\t->first()\r\n\t->all();\r\n";
+
+        $this->assertSame($expected, $this->fix($input, 120, new WhitespacesFixerConfig("\t", "\r\n")));
+    }
+
     #[DataProvider('provideNestedChainContexts')]
     public function test_short_nested_chains_exclude_the_outer_call_and_indentation(string $context): void
     {
