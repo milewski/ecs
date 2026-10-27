@@ -76,6 +76,8 @@ return register_fixers([
 
 Single argument callbacks stay compact. Arguments whose parameter names are unavailable or whose binding depends on variadic parameters or unpacking are wrapped without changing their binding. Builder types assigned outside a conditional remain available inside its branches; typed `when` and `unless` callbacks that return the same builder preserve that type for resolving forwarded methods such as `whereRaw(sql: ..., bindings: ...)`.
 
+Registered closure macros use their declared parameter names. Livewire form assertions also resolve the installed Filament form mixins without booting the application or executing their factories. For example, a two-argument `assertFormFieldExists(...)` call uses `key:` and `form:`; Filament accepts a callback in that second position. Conditional factories and unknown macro signatures remain positional.
+
 ## Array layout
 
 Single-line arrays keep bracket padding, such as `[ 28, 84 ]`. When an array contains multiline expressions, its elements start on separate lines after `[` and its closing `]` goes on its own line. This also applies when another rule wraps a constructor call inside the array.

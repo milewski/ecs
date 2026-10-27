@@ -4,9 +4,11 @@ declare(strict_types = 1);
 
 namespace Milewski\ECS\Fixers;
 
+use Closure;
 use Milewski\ECS\TokenAnalyzer\BooleanExpressionAnalyzer;
 use Milewski\ECS\TokenAnalyzer\ControlStructureHeaderAnalyzer;
 use Milewski\ECS\TokenAnalyzer\LineLengthAnalyzer;
+use Milewski\ECS\TokenAnalyzer\ReturnedClosureAnalyzer;
 use Milewski\ECS\TokenAnalyzer\SprintfCallAnalyzer;
 use PhpCsFixer\AbstractFixer;
 use PhpCsFixer\Fixer\ConfigurableFixerInterface;
@@ -22,6 +24,8 @@ use PhpCsFixer\FixerDefinition\FixerDefinitionInterface;
 use PhpCsFixer\Tokenizer\CT;
 use PhpCsFixer\Tokenizer\Token;
 use PhpCsFixer\Tokenizer\Tokens;
+use PhpParser\Node\Name;
+use PhpParser\Node\Param;
 use ReflectionClass;
 use ReflectionFunction;
 use ReflectionMethod;
@@ -91,6 +95,8 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
      */
     private array $pestThisTypes = [];
 
+    private ?ReturnedClosureAnalyzer $returnedClosureAnalyzer = null;
+
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
@@ -103,7 +109,6 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
     public function getPriority(): int
     {
-
         return 31;
     }
 
@@ -518,13 +523,15 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         if ($namespaceIndexes === []) {
 
-            return [ [
-                'start' => 0,
-                'end' => $tokens->count() - 1,
-                'name' => '',
-                'classImports' => [],
-                'functionImports' => [],
-            ] ];
+            return [
+                [
+                    'start' => 0,
+                    'end' => $tokens->count() - 1,
+                    'name' => '',
+                    'classImports' => [],
+                    'functionImports' => [],
+                ],
+            ];
 
         }
 
@@ -2401,7 +2408,8 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             return $this->resolveReflectedMethodReturnClass($reflectionMethod);
         }
 
-        $magicMethod = $this->reflectMagicMethod($className, $method);
+        $magicMethod = $this->reflectMacroMethod($className, $method)
+            ?? $this->reflectMagicMethod($className, $method);
 
         return $magicMethod === null || $magicMethod[ 'returnType' ] === null
             ? null
@@ -2428,7 +2436,120 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             return $this->reflectionParameters($reflectionMethod->getParameters());
         }
 
-        return $this->reflectMagicMethod($className, $method)[ 'parameters' ] ?? null;
+        return ($this->reflectMacroMethod($className, $method)
+            ?? $this->reflectMagicMethod($className, $method))[ 'parameters' ] ?? null;
+    }
+
+    /**
+     * @return array{
+     *     returnType: string|null,
+     *     parameters: list<array{name: string, variadic: bool}>,
+     *     declaringClass: ReflectionClass
+     * }|null
+     */
+    private function reflectMacroMethod(string $className, string $method): ?array
+    {
+        try {
+
+            $class = new ReflectionClass($className);
+
+            $macros = $this->registeredMacros($class);
+
+            if (array_key_exists($method, $macros)) {
+
+                if ($macros[ $method ] instanceof Closure === false) {
+                    return null;
+                }
+
+                $function = new ReflectionFunction($macros[ $method ]);
+                $returnType = $function->getReturnType();
+                $returnClass = $returnType instanceof ReflectionNamedType
+                    ? $this->resolveReflectedNamedType($returnType, $class)
+                    : null;
+
+                return [
+                    'returnType' => $returnClass === null ? null : '\\' . $returnClass,
+                    'parameters' => $this->reflectionParameters($function->getParameters()),
+                    'declaringClass' => $class,
+                ];
+
+            }
+
+            if (is_a($className, 'Livewire\\Features\\SupportTesting\\Testable', true) === false) {
+                return null;
+            }
+
+            if (class_exists('Filament\\Forms\\Testing\\TestsForms') === false) {
+                return null;
+            }
+
+            $mixin = new ReflectionClass('Filament\\Forms\\Testing\\TestsForms');
+
+            if ($mixin->hasMethod($method) === false) {
+                return null;
+            }
+
+            $factory = $mixin->getMethod($method);
+
+            if ($factory->isPrivate()) {
+                return null;
+            }
+
+            if ($factory->getName() !== $method) {
+                return null;
+            }
+
+            $this->returnedClosureAnalyzer ??= new ReturnedClosureAnalyzer();
+            $closure = $this->returnedClosureAnalyzer->find($factory);
+
+            if ($closure === null) {
+                return null;
+            }
+
+            $returnType = null;
+
+            if ($closure->returnType instanceof Name) {
+
+                if (in_array(strtolower($closure->returnType->toString()), [ 'self', 'static' ], true)) {
+                    $returnType = $closure->returnType->toString();
+                }
+
+            }
+
+            return [
+                'returnType' => $returnType,
+                'parameters' => array_map(
+                    callback: static fn (Param $parameter): array => [
+                        'name' => $parameter->var->name,
+                        'variadic' => $parameter->variadic,
+                    ],
+                    array: $closure->params,
+                ),
+                'declaringClass' => $class,
+            ];
+
+        } catch (Throwable) {
+
+            return null;
+
+        }
+    }
+
+    private function registeredMacros(ReflectionClass $class): array
+    {
+        if ($class->hasProperty('macros') === false) {
+            return [];
+        }
+
+        $property = $class->getProperty('macros');
+
+        if ($property->isStatic() === false) {
+            return [];
+        }
+
+        $macros = $property->getValue();
+
+        return is_array($macros) ? $macros : [];
     }
 
     private function reflectMethod(string $className, string $method): ?ReflectionMethod
