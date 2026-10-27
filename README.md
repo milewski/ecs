@@ -102,3 +102,11 @@ templates, model mixins and other type metadata. Descriptions are removed from
 mixed PHPDoc blocks. Required PHPStan, Psalm, PHPCS, IDE and coverage directives
 remain functional. Invalid typed PHPDoc produces an error instead of deleting
 metadata. Comments inside string literals and formatter input fixtures are data.
+
+## Error handling
+
+The default `SetList::MILEWSKI` preset forbids the `@` error suppression operator,
+including `@file_get_contents(...)`. Handle errors explicitly instead.
+Both `ecs check` and `ecs check --fix` report an error; this rule does not
+automatically change error handling. At signs inside strings and comments are
+unaffected.
