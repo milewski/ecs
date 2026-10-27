@@ -61,6 +61,8 @@ Control structure headers, including `if`, `elseif`, and loop conditions, are ex
 
 `sprintf(...)` keeps its format and values on one line, even above the limit. An enclosing call places that expression on its own argument line, including single-argument calls such as `by(sprintf(...))`. Literal multiline strings are preserved.
 
+Pest's `test(...)` and `it(...)` keep the description and closure opening on the same line, regardless of length. Previously expanded calls return to `test('description', function (): void { ... });`, removing `description:` and `closure:` when their order matches the positional parameters. Closure bodies keep their normal formatting. Calls with unpacked arguments, reordered or unknown argument names, or comments between arguments are preserved.
+
 Both rules accept a positive integer `max_line_length` option. To change the wrapping threshold in your `ecs.php` configuration:
 
 ```php
