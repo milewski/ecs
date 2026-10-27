@@ -212,11 +212,33 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         }
     }
 
-    private function compactCall(Tokens $tokens, int $start, int $end): void
+    private function compactCall(Tokens $tokens, int $start, int $end, bool $preserveBlocks = false): void
     {
         for ($index = $start + 1; $index < $end; $index++) {
 
-            if ($tokens[ $index ]->isWhitespace() && preg_match('/\R/', $tokens[ $index ]->getContent()) === 1) {
+            if ($preserveBlocks) {
+
+                $block = Tokens::detectBlockType($tokens[ $index ]);
+
+                if ($block !== null) {
+
+                    if ($block[ 'isStart' ]) {
+
+                        $index = $tokens->findBlockEnd($block[ 'type' ], $index);
+
+                        continue;
+
+                    }
+
+                }
+
+            }
+
+            if ($tokens[ $index ]->isWhitespace() === false) {
+                continue;
+            }
+
+            if (preg_match('/\R/', $tokens[ $index ]->getContent()) === 1) {
                 $tokens[ $index ] = new Token([ T_WHITESPACE, ' ' ]);
             }
 
@@ -286,6 +308,10 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             if ($tokens[ $index ]->equals('(') === false
                 || $booleanExpressions->contains($tokens[ $index ])
                 || $this->isCallArgumentList($tokens, $index) === false) {
+                continue;
+            }
+
+            if ($this->isPestTestCall($tokens, $index)) {
                 continue;
             }
 
@@ -419,6 +445,97 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         return $beforeName === null || $tokens[ $beforeName ]->isGivenKind([ T_FUNCTION, T_FN, CT::T_RETURN_REF, T_ATTRIBUTE ]) === false;
     }
 
+    private function isPestTestCall(Tokens $tokens, int $openParenthesis): bool
+    {
+        $nameIndex = $tokens->getPrevMeaningfulToken($openParenthesis);
+
+        if ($nameIndex === null) {
+            return false;
+        }
+
+        if ($this->isNameToken($tokens[ $nameIndex ]) === false) {
+            return false;
+        }
+
+        $callable = $this->readQualifiedNameEndingAt($tokens, $nameIndex);
+
+        if (in_array(strtolower(ltrim($callable[ 'name' ], '\\')), [ 'test', 'it' ], true) === false) {
+            return false;
+        }
+
+        $previous = $tokens->getPrevMeaningfulToken($callable[ 'start' ]);
+
+        if ($previous === null) {
+            return true;
+        }
+
+        return $tokens[ $previous ]->isGivenKind([
+            T_OBJECT_OPERATOR,
+            T_NULLSAFE_OBJECT_OPERATOR,
+            T_DOUBLE_COLON,
+            T_FUNCTION,
+            T_FN,
+            CT::T_RETURN_REF,
+            T_NEW,
+            T_ATTRIBUTE,
+            CT::T_NAMESPACE_OPERATOR,
+        ]) === false;
+    }
+
+    private function compactPestTestCall(Tokens $tokens, int $start, int $end): void
+    {
+        $arguments = $this->inspectArguments($tokens, $start, $end);
+
+        foreach ($arguments as $position => $argument) {
+
+            if ($argument[ 'unpacked' ]) {
+                return;
+            }
+
+            if ($argument[ 'name' ] === null) {
+                continue;
+            }
+
+            if ($argument[ 'name' ] !== ([ 'description', 'closure' ][ $position ] ?? null)) {
+                return;
+            }
+
+        }
+
+        for ($index = $start + 1; $index < $end; $index++) {
+
+            if ($tokens[ $index ]->isComment()) {
+                return;
+            }
+
+            $block = Tokens::detectBlockType($tokens[ $index ]);
+
+            if ($block === null) {
+                continue;
+            }
+
+            if ($block[ 'isStart' ]) {
+                $index = $tokens->findBlockEnd($block[ 'type' ], $index);
+            }
+
+        }
+
+        foreach ($arguments as $argument) {
+
+            if ($argument[ 'name' ] === null) {
+                continue;
+            }
+
+            $colon = $tokens->getNextMeaningfulToken($argument[ 'start' ]);
+            $value = $tokens->getNextMeaningfulToken($colon);
+
+            $tokens->clearRange($argument[ 'start' ], $value - 1);
+
+        }
+
+        $this->compactCall($tokens, $start, $end, preserveBlocks: true);
+    }
+
     private function nameExpandedArguments(Tokens $tokens): void
     {
         $this->namespaceContexts = $this->collectNamespaceContexts($tokens);
@@ -461,6 +578,14 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
                 type: Tokens::BLOCK_TYPE_PARENTHESIS_BRACE,
                 searchIndex: $openParenthesis,
             );
+
+            if ($this->isPestTestCall($tokens, $openParenthesis)) {
+
+                $this->compactPestTestCall($tokens, $openParenthesis, $closeParenthesis);
+
+                continue;
+
+            }
 
             if ($tokens->isPartialCodeMultiline($openParenthesis, $closeParenthesis) === false) {
                 continue;
