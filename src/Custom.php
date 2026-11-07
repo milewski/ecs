@@ -21,6 +21,7 @@ use Milewski\ECS\Fixers\PaddedMultilineStatementFixer;
 use Milewski\ECS\Fixers\SnakeCaseGlobalFunctionNameFixer;
 use Milewski\ECS\Fixers\StatementGroupingFixer;
 use Milewski\ECS\Fixers\TraitUseSpacingFixer;
+use Milewski\ECS\Sniffs\ForbidErrorSuppressionSniff;
 use Milewski\ECS\Sniffs\ForbidSwitchStatementSniff;
 use Milewski\ECS\Sniffs\RequireParameterTypeSniff;
 
@@ -41,6 +42,7 @@ return register_fixers(fixers: [
     NoPointlessMixedPhpdocFixer::class => true,
     NoNarrativeCommentsFixer::class => true,
     SnakeCaseGlobalFunctionNameFixer::class => true,
+    ForbidErrorSuppressionSniff::class => true,
     ForbidSwitchStatementSniff::class => true,
     RequireParameterTypeSniff::class => true,
     LaravelEmptyToBlankFixer::class => true,

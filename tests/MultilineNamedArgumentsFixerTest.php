@@ -8,6 +8,53 @@ use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class MultilineNamedArgumentsFixerTest extends EcsTestCase
 {
+    public function test_pest_test_headers_are_inline_and_positional_in_the_default_preset(): void
+    {
+        $input = <<<'PHP'
+        <?php
+
+        declare(strict_types = 1);
+
+        test(
+            description: 'a patient a media buyer brought in who buys through a remarketing link is charged by both',
+            closure: function () use ($run, $visitor, $sale, $fee, $organic): void {
+
+                $fee($this->buyer, 'source', 'organic', '10.00');
+                $origin = $visitor($organic);
+                $returning = $visitor([ 'origin_visitor_id' => $origin, 'recovery_entry' => 'order_link', 'created_at' => '2026-09-12 11:00:00' ]);
+                $sale($returning, 'in_returned', 'subscription_create', [ 'recovery_campaign_key' => 'rapid_response_order_link_v1' ]);
+
+                $this->assertEquals(40.00, $run('kpis', 'cash')[ 0 ][ 'agency_fees' ]);
+
+            },
+        );
+
+        PHP;
+
+        $expected = <<<'PHP'
+        <?php
+
+        declare(strict_types = 1);
+
+        test('a patient a media buyer brought in who buys through a remarketing link is charged by both', function () use ($run, $visitor, $sale, $fee, $organic): void {
+
+            $fee($this->buyer, 'source', 'organic', '10.00');
+
+            $origin = $visitor($organic);
+            $returning = $visitor([ 'origin_visitor_id' => $origin, 'recovery_entry' => 'order_link', 'created_at' => '2026-09-12 11:00:00' ]);
+
+            $sale($returning, 'in_returned', 'subscription_create', [ 'recovery_campaign_key' => 'rapid_response_order_link_v1' ]);
+
+            $this->assertEquals(40.00, $run('kpis', 'cash')[ 0 ][ 'agency_fees' ]);
+
+        });
+
+        PHP;
+
+        $this->assertCodeIsFixedTo($input, $expected);
+        $this->assertCodeIsFixedTo($expected, $expected);
+    }
+
     public function test_newly_expanded_calls_receive_control_block_padding_in_one_pass(): void
     {
         $input = <<<'PHP'
