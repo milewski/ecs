@@ -105,6 +105,39 @@ mixed PHPDoc blocks. Required PHPStan, Psalm, PHPCS, IDE and coverage directives
 remain functional. Invalid typed PHPDoc produces an error instead of deleting
 metadata. Comments inside string literals and formatter input fixtures are data.
 
+## Explicit Eloquent attribute assignment
+
+In Laravel projects, the default `SetList::MILEWSKI` preset enables
+`ForbidLaravelMassAssignmentSniff`. Assign every attribute individually and persist
+the model with `save()`:
+
+```php
+$user = new User();
+$user->name = $name;
+$user->email = $email;
+$user->save();
+```
+
+The rule rejects Eloquent mass assignment even when an array contains explicit
+keys or validated input. This includes `create`, `fill`, `forceFill`, `update`,
+`firstOrCreate`, `updateOrCreate`, relationship creation, model constructor
+attributes, and Eloquent bulk inserts/upserts. Quiet and forced variants are also
+rejected. `unguard`, `unguarded`, and runtime fillable/guard mutators are forbidden.
+
+Models must retain full guarding: omit `$guarded` to inherit Laravel's default,
+or declare `protected $guarded = ['*'];`. Empty or partial guards, including
+`protected $guarded = [];`, nonempty `$fillable`, and enabling `$unguarded` are
+reported. Laravel's `Unguarded`, `Fillable`, and `Guarded` attributes follow the
+same policy. `ecs check --fix` reports these errors without rewriting persistence
+logic.
+
+Laravel is detected through a loaded application/helpers or an ancestor containing
+both `artisan` and `bootstrap/app.php`. Receivers are resolved from imports, local
+model inheritance, autoloadable classes, native parameter/property/return types,
+assignments, and Eloquent chains. Unrelated APIs such as `Schema::create()` and
+factory creation remain available. Dynamically named calls and receivers whose
+model type cannot be resolved require additional static analysis or code review.
+
 ## Error handling
 
 The default `SetList::MILEWSKI` preset forbids the `@` error suppression operator,

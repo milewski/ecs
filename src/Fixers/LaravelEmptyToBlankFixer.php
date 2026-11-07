@@ -4,6 +4,7 @@ declare(strict_types = 1);
 
 namespace Milewski\ECS\Fixers;
 
+use Milewski\ECS\TokenAnalyzer\LaravelProjectDetector;
 use PhpCsFixer\AbstractFixer;
 use PhpCsFixer\FixerDefinition\FixerDefinition;
 use PhpCsFixer\FixerDefinition\FixerDefinitionInterface;
@@ -13,11 +14,6 @@ use SplFileInfo;
 
 final class LaravelEmptyToBlankFixer extends AbstractFixer
 {
-    /**
-     * @var array<string, bool>
-     */
-    private array $laravelDirectoryCache = [];
-
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
@@ -33,7 +29,7 @@ final class LaravelEmptyToBlankFixer extends AbstractFixer
 
     protected function applyFix(SplFileInfo $file, Tokens $tokens): void
     {
-        if ($this->isLaravelProject($file) === false) {
+        if (new LaravelProjectDetector()->supports($file) === false) {
             return;
         }
 
@@ -70,60 +66,5 @@ final class LaravelEmptyToBlankFixer extends AbstractFixer
             }
 
         }
-    }
-
-    private function isLaravelProject(SplFileInfo $file): bool
-    {
-        if ((function_exists('blank') && function_exists('filled'))
-            || class_exists('Illuminate\Foundation\Application')) {
-            return true;
-        }
-
-        $realPath = $file->getRealPath();
-        $directory = $realPath === false ? $file->getPath() : dirname($realPath);
-        $visitedDirectories = [];
-        $isLaravelProject = false;
-
-        while (true) {
-
-            $visitedDirectories[] = $directory;
-
-            if ($this->hasLaravelApplicationFiles($directory)) {
-
-                $isLaravelProject = true;
-
-                break;
-
-            }
-
-            if (array_key_exists($directory, $this->laravelDirectoryCache)) {
-
-                $isLaravelProject = $this->laravelDirectoryCache[ $directory ];
-
-                break;
-
-            }
-
-            $parentDirectory = dirname($directory);
-
-            if ($parentDirectory === $directory) {
-                break;
-            }
-
-            $directory = $parentDirectory;
-
-        }
-
-        foreach ($visitedDirectories as $visitedDirectory) {
-            $this->laravelDirectoryCache[ $visitedDirectory ] = $isLaravelProject;
-        }
-
-        return $isLaravelProject;
-    }
-
-    private function hasLaravelApplicationFiles(string $directory): bool
-    {
-        return is_file(sprintf('%s/artisan', $directory))
-            && is_file(sprintf('%s/bootstrap/app.php', $directory));
     }
 }
