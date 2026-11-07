@@ -22,6 +22,7 @@ use Milewski\ECS\Fixers\SnakeCaseGlobalFunctionNameFixer;
 use Milewski\ECS\Fixers\StatementGroupingFixer;
 use Milewski\ECS\Fixers\TraitUseSpacingFixer;
 use Milewski\ECS\Sniffs\ForbidErrorSuppressionSniff;
+use Milewski\ECS\Sniffs\ForbidLaravelMassAssignmentSniff;
 use Milewski\ECS\Sniffs\ForbidSwitchStatementSniff;
 use Milewski\ECS\Sniffs\RequireParameterTypeSniff;
 
@@ -46,6 +47,7 @@ return register_fixers(fixers: [
     ForbidSwitchStatementSniff::class => true,
     RequireParameterTypeSniff::class => true,
     LaravelEmptyToBlankFixer::class => true,
+    ForbidLaravelMassAssignmentSniff::class => true,
 ])->withSets([
     __DIR__ . '/PhpCsFixer/Alias.php',
     __DIR__ . '/PhpCsFixer/ArrayNotation.php',
