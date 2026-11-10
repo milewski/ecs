@@ -118,11 +118,29 @@ $user->email = $email;
 $user->save();
 ```
 
-The rule rejects Eloquent mass assignment even when an array contains explicit
-keys or validated input. This includes `create`, `fill`, `forceFill`, `update`,
-`firstOrCreate`, `updateOrCreate`, relationship creation, model constructor
-attributes, and Eloquent bulk inserts/upserts. Quiet and forced variants are also
+The rule rejects model mass assignment even when an array contains explicit keys
+or validated input. This includes `fill`, `forceFill`, `update` on a model
+instance, model constructor attributes, and methods such as `create`,
+`firstOrCreate`, `updateOrCreate` and relationship creation that populate model
+attributes internally. Quiet, forced and `updateOrFail` variants are also
 rejected. `unguard`, `unguarded`, and runtime fillable/guard mutators are forbidden.
+
+Query-builder writes are allowed without `toBase()`. This includes Eloquent and
+relationship query updates, bulk inserts and upserts:
+
+```php
+User::where('active', true)->update(['status' => 'verified']);
+User::query()->insert($rows);
+User::upsert($rows, ['email'], ['name']);
+$user->posts()->whereNull('published_at')->update(['published_at' => now()]);
+```
+
+These operations write SQL columns without filling model instances. Query
+updates retain Eloquent's timestamp handling and execute as one statement. The
+rule distinguishes queries from retrieved models: `User::where(...)->first()->update($attributes)`
+is still rejected. Choose the written columns explicitly and validate and
+authorize their values; allowing query writes does not add mass-assignment
+protection to them.
 
 Models must retain full guarding: omit `$guarded` to inherit Laravel's default,
 or declare `protected $guarded = ['*'];`. Empty or partial guards, including
