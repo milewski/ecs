@@ -60,6 +60,7 @@ final class ForbidLaravelMassAssignmentSniff implements Sniff
         'firstornew',
         'update',
         'updatequietly',
+        'updateorfail',
         'updateorcreate',
         'createmany',
         'createmanyquietly',
@@ -69,13 +70,6 @@ final class ForbidLaravelMassAssignmentSniff implements Sniff
         'makemany',
         'newinstance',
         'setrawattributes',
-        'insert',
-        'insertgetid',
-        'insertorignore',
-        'insertusing',
-        'insertorignoreusing',
-        'upsert',
-        'updateorinsert',
         'unguard',
         'unguarded',
         'fillable',
@@ -252,7 +246,7 @@ final class ForbidLaravelMassAssignmentSniff implements Sniff
 
         if ($node instanceof New_) {
 
-            if ($this->isEloquent($this->expressionType($node, $class, $variables))) {
+            if ($this->eloquentType($this->expressionType($node, $class, $variables)) === self::MODEL) {
 
                 if ($node->args !== []) {
                     $this->report($file, $node, 'Passing attributes to a model constructor is forbidden.');
@@ -271,17 +265,13 @@ final class ForbidLaravelMassAssignmentSniff implements Sniff
                     ? $this->typeName($receiver, $class)
                     : $this->expressionType($receiver, $class, $variables);
 
-                if ($this->isEloquent($type)) {
+                if ($this->isMassAssignment(strtolower($node->name->toString()), $type)) {
 
-                    if (in_array(strtolower($node->name->toString()), self::MASS_ASSIGNMENT_METHODS, true)) {
-
-                        $this->report(
-                            file: $file,
-                            node: $node->name,
-                            message: sprintf('Eloquent %s() mass assignment is forbidden.', $node->name),
-                        );
-
-                    }
+                    $this->report(
+                        file: $file,
+                        node: $node->name,
+                        message: sprintf('Eloquent %s() mass assignment is forbidden.', $node->name),
+                    );
 
                 }
 
@@ -322,6 +312,23 @@ final class ForbidLaravelMassAssignmentSniff implements Sniff
             }
 
         }
+    }
+
+    private function isMassAssignment(string $method, ?string $type): bool
+    {
+        if ($this->isEloquent($type) === false) {
+            return false;
+        }
+
+        if (in_array($method, self::MASS_ASSIGNMENT_METHODS, true) === false) {
+            return false;
+        }
+
+        if ($method === 'update') {
+            return $this->eloquentType($type) === self::MODEL;
+        }
+
+        return true;
     }
 
     private function checkConfiguration(File $file, Node $node, string $name, ?Expr $value): void
@@ -512,8 +519,28 @@ final class ForbidLaravelMassAssignmentSniff implements Sniff
                         return null;
                     }
 
+                    if (in_array($method, [ 'first', 'firstorfail', 'firstwhere', 'firstor', 'find', 'findorfail', 'findornew', 'findor', 'sole', 'getmodel' ], true)) {
+                        return self::MODEL;
+                    }
+
                     if (in_array($method, [ 'hasone', 'hasmany', 'belongsto', 'belongstomany', 'morphone', 'morphmany', 'morphto', 'morphtomany' ], true)) {
                         return self::RELATION;
+                    }
+
+                    if (in_array($method, [ 'query', 'newquery', 'newmodelquery', 'newquerywithoutscopes', 'newquerywithoutrelationships', 'newqueryforrestoration' ], true)) {
+                        return self::BUILDER;
+                    }
+
+                    if (str_starts_with($method, 'where')) {
+                        return self::BUILDER;
+                    }
+
+                    if (str_starts_with($method, 'orwhere')) {
+                        return self::BUILDER;
+                    }
+
+                    if ($node instanceof StaticCall) {
+                        return self::BUILDER;
                     }
 
                     return $owner;
@@ -583,44 +610,53 @@ final class ForbidLaravelMassAssignmentSniff implements Sniff
         return $class instanceof Class_ ? $class->extends?->toString() : null;
     }
 
+    private function isEloquent(?string $name): bool
+    {
+        return $this->eloquentType($name) !== null;
+    }
+
     /**
      * @param list<string> $visited
      */
-    private function isEloquent(?string $name, array $visited = []): bool
+    private function eloquentType(?string $name, array $visited = []): ?string
     {
         if ($name === null) {
-            return false;
+            return null;
         }
 
         $key = strtolower($name);
 
         if (in_array($key, $visited, true)) {
-            return false;
+            return null;
         }
 
-        if (in_array($key, array_map(strtolower(...), [ self::MODEL, self::BUILDER, self::RELATION, 'Illuminate\\Foundation\\Auth\\User', 'Illuminate\\Database\\Eloquent\\Relations\\Pivot', 'Illuminate\\Contracts\\Database\\Eloquent\\Builder' ]), true)) {
-            return true;
+        if (in_array($key, array_map(strtolower(...), [ self::MODEL, 'Illuminate\\Foundation\\Auth\\User', 'Illuminate\\Database\\Eloquent\\Relations\\Pivot', 'Illuminate\\Database\\Eloquent\\Relations\\MorphPivot' ]), true)) {
+            return self::MODEL;
+        }
+
+        if (in_array($key, array_map(strtolower(...), [ self::BUILDER, 'Illuminate\\Contracts\\Database\\Eloquent\\Builder' ]), true)) {
+            return self::BUILDER;
         }
 
         if (str_starts_with($key, 'illuminate\\database\\eloquent\\relations\\')) {
-            return true;
+            return self::RELATION;
         }
 
         $declaration = $this->classes[ $key ] ?? null;
 
         if ($declaration instanceof Class_) {
-            return $this->isEloquent($declaration->extends?->toString(), [ ...$visited, $key ]);
+            return $this->eloquentType($declaration->extends?->toString(), [ ...$visited, $key ]);
         }
 
         foreach ([ self::MODEL, self::BUILDER, self::RELATION ] as $parent) {
 
             if (is_a($name, $parent, true)) {
-                return true;
+                return $parent;
             }
 
         }
 
-        return false;
+        return null;
     }
 
     /**

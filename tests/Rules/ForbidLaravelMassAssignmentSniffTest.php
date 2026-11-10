@@ -50,6 +50,7 @@ final class ForbidLaravelMassAssignmentSniffTest extends EcsTestCase
             'firstOrNew',
             'update',
             'updateQuietly',
+            'updateOrFail',
             'updateOrCreate',
             'createMany',
             'createManyQuietly',
@@ -59,13 +60,6 @@ final class ForbidLaravelMassAssignmentSniffTest extends EcsTestCase
             'makeMany',
             'newInstance',
             'setRawAttributes',
-            'insert',
-            'insertGetId',
-            'insertOrIgnore',
-            'insertUsing',
-            'insertOrIgnoreUsing',
-            'upsert',
-            'updateOrInsert',
             'unguard',
             'unguarded',
             'fillable',
@@ -87,11 +81,37 @@ final class ForbidLaravelMassAssignmentSniffTest extends EcsTestCase
 
         yield 'typed relationship' => [ '$relation->createMany($rows)', 'createMany' ];
 
-        yield 'query chain' => [ 'User::query()->where("active", true)->update(["name" => "Ada"])', 'update' ];
+        yield 'query creation' => [ 'User::query()->where("active", true)->create(["name" => "Ada"])', 'create' ];
 
         yield 'assigned model' => [ '$copy = new User(); $copy->fill($attributes)', 'fill' ];
 
-        yield 'assigned query' => [ '$query = User::query(); $query->update($attributes)', 'update' ];
+        yield 'model update' => [ '$user->update($attributes)', 'update' ];
+
+        yield 'new model update' => [ '(new User())->update($attributes)', 'update' ];
+
+        yield 'assigned model update' => [ '$copy = new User(); $copy->update($attributes)', 'update' ];
+
+        yield 'model from builder' => [ '$builder->getModel()->update($attributes)', 'update' ];
+
+        yield 'assigned retrieved model' => [ '$found = User::where("active", true)->first(); $found->update($attributes)', 'update' ];
+
+        yield 'model from relation' => [ '$relation->first()->update($attributes)', 'update' ];
+
+        yield 'model from collection' => [ 'User::all()->first()->update($attributes)', 'update' ];
+
+        yield 'model query creation' => [ '$user->newQuery()->create($attributes)', 'create' ];
+
+        yield 'model quiet update' => [ '$user->updateQuietly($attributes)', 'updateQuietly' ];
+
+        yield 'model update or fail' => [ '$user->updateOrFail($attributes)', 'updateOrFail' ];
+
+        foreach ([ 'first', 'firstOrFail', 'firstWhere', 'firstOr', 'find', 'findOrFail', 'findOrNew', 'findOr', 'sole' ] as $method) {
+            yield 'retrieved model via ' . $method => [ sprintf('User::query()->%s($id)->update($attributes)', $method), 'update' ];
+        }
+
+        foreach ([ 'fresh', 'refresh', 'replicate', 'setAttribute', 'setRelation', 'load', 'loadMissing' ] as $method) {
+            yield 'fluent model via ' . $method => [ sprintf('$user->%s($value)->update($attributes)', $method), 'update' ];
+        }
 
         yield 'retrieved model' => [ '$found = User::find(1); $found->fill($attributes)', 'fill' ];
 
@@ -100,6 +120,70 @@ final class ForbidLaravelMassAssignmentSniffTest extends EcsTestCase
         yield 'closure capture' => [ '$callback = function () use ($user): void { $user->fill($attributes); }', 'fill' ];
 
         yield 'first class callable' => [ '$user->fill(...)', 'fill' ];
+    }
+
+    #[DataProvider('provideQueryWrites')]
+    public function test_accepts_query_writes_without_to_base(string $call): void
+    {
+        $this->assertSame([], $this->processCode(<<<PHP
+        <?php
+        use Illuminate\Database\Eloquent\Model;
+        use Illuminate\Database\Eloquent\Builder;
+        use Illuminate\Database\Eloquent\Relations\HasMany;
+        class User extends Model {}
+        function persist(User \$user, Builder \$builder, HasMany \$relation): void {
+            $call;
+        }
+        PHP));
+    }
+
+    public static function provideQueryWrites(): iterable
+    {
+        foreach ([ 'insert', 'insertGetId', 'insertOrIgnore', 'insertUsing', 'insertOrIgnoreUsing', 'upsert', 'updateOrInsert' ] as $method) {
+
+            yield 'static ' . $method => [ sprintf('User::%s($rows)', $method) ];
+
+            yield 'builder ' . $method => [ sprintf('$builder->%s($rows)', $method) ];
+
+            yield 'relation ' . $method => [ sprintf('$relation->%s($rows)', $method) ];
+
+        }
+
+        yield 'typed builder update' => [ '$builder->update($attributes)' ];
+
+        yield 'typed relation update' => [ '$relation->update($attributes)' ];
+
+        yield 'query chain update' => [ 'User::query()->where("active", true)->update($attributes)' ];
+
+        yield 'static where update' => [ 'User::where("active", true)->update($attributes)' ];
+
+        yield 'static scope update' => [ 'User::active()->update($attributes)' ];
+
+        yield 'static select update' => [ 'User::select("id")->where("active", true)->update($attributes)' ];
+
+        yield 'assigned query update' => [ '$query = User::query(); $query->whereKey($id)->update($attributes)' ];
+
+        yield 'assigned scoped query update' => [ '$query = User::where("active", true); $query->update($attributes)' ];
+
+        yield 'builder nullsafe update' => [ '$builder?->where("active", true)?->update($attributes)' ];
+
+        yield 'builder callable' => [ '$builder->update(...)' ];
+
+        yield 'case insensitive query' => [ 'User::QUERY()->WHERE("active", true)->UPDATE($attributes)' ];
+
+        yield 'query from model' => [ '$user->newQuery()->update($attributes)' ];
+
+        yield 'where from model' => [ '$user->where("active", true)->update($attributes)' ];
+
+        yield 'or where from model' => [ '$user->orWhere("active", true)->update($attributes)' ];
+
+        yield 'relation from model' => [ '$user->hasMany(User::class)->where("active", true)->update($attributes)' ];
+
+        yield 'builder constructor' => [ '(new Builder($baseQuery))->update($attributes)' ];
+
+        yield 'relation constructor' => [ '(new HasMany($builder, $user, "user_id", "id"))->update($attributes)' ];
+
+        yield 'base query still allowed' => [ 'User::query()->toBase()->update($attributes)' ];
     }
 
     #[DataProvider('provideForbiddenConfiguration')]
@@ -192,6 +276,14 @@ final class ForbidLaravelMassAssignmentSniffTest extends EcsTestCase
 
         yield 'typed property' => [ 'class User extends \Illuminate\Database\Eloquent\Model {} class Store { private User $user; function store(): void { $this->user->fill($attributes); } }' ];
 
+        yield 'typed property update' => [ 'class User extends \Illuminate\Database\Eloquent\Model {} class Store { private User $user; function store(): void { $this->user->update($attributes); } }' ];
+
+        yield 'local model return update' => [ 'class User extends \Illuminate\Database\Eloquent\Model {} class Store { function user(): User {} function store(): void { $this->user()->update($attributes); } }' ];
+
+        yield 'pivot update' => [ 'class Membership extends \Illuminate\Database\Eloquent\Relations\Pivot {} function store(Membership $membership): void { $membership->update($attributes); }' ];
+
+        yield 'morph pivot update' => [ 'class Membership extends \Illuminate\Database\Eloquent\Relations\MorphPivot {} function store(Membership $membership): void { $membership->update($attributes); }' ];
+
         yield 'nullable parameter' => [ 'class User extends \Illuminate\Database\Eloquent\Model {} function store(?User $user): void { $user?->fill($attributes); }' ];
 
         yield 'local return type' => [ 'class User extends \Illuminate\Database\Eloquent\Model {} class Store { function user(): User {} function store(): void { $this->user()->fill($attributes); } }' ];
@@ -247,6 +339,24 @@ final class ForbidLaravelMassAssignmentSniffTest extends EcsTestCase
 
         yield 'raw query builder' => [ 'function store(\Illuminate\Database\Query\Builder $query): void { $query->update($values); }' ];
 
+        yield 'builder contract' => [ 'function store(\Illuminate\Contracts\Database\Eloquent\Builder $query): void { $query->update($values); }' ];
+
+        yield 'custom builder' => [ 'class UserQuery extends \Illuminate\Database\Eloquent\Builder {} function store(UserQuery $query): void { $query->where("active", true)->update($values); }' ];
+
+        yield 'custom relation' => [ 'class Posts extends \Illuminate\Database\Eloquent\Relations\HasMany {} function store(Posts $posts): void { $posts->update($values); }' ];
+
+        yield 'nullable builder' => [ 'function store(?\Illuminate\Database\Eloquent\Builder $query): void { $query?->update($values); }' ];
+
+        yield 'builder union' => [ 'function store(\Illuminate\Database\Eloquent\Builder|false $query): void { $query->update($values); }' ];
+
+        yield 'local builder return type' => [ 'class Store { function query(): \Illuminate\Database\Eloquent\Builder {} function store(): void { $this->query()->update($values); } }' ];
+
+        yield 'local relation return type' => [ 'class User extends \Illuminate\Database\Eloquent\Model { function posts(): \Illuminate\Database\Eloquent\Relations\HasMany {} function store(): void { $this->posts()->update($values); } }' ];
+
+        yield 'builder property' => [ 'class Store { private \Illuminate\Database\Eloquent\Builder $query; function store(): void { $this->query->update($values); } }' ];
+
+        yield 'promoted builder property' => [ 'class Store { function __construct(private \Illuminate\Database\Eloquent\Builder $query) {} function store(): void { $this->query->update($values); } }' ];
+
         yield 'reassigned receiver' => [ 'class User extends \Illuminate\Database\Eloquent\Model {} $user = new User(); $user = new Client(); $user->update($values);' ];
 
         yield 'separate function scopes' => [ 'class User extends \Illuminate\Database\Eloquent\Model {} function first(User $item): void {} function second(Client $item): void { $item->update($values); }' ];
@@ -296,11 +406,21 @@ final class ForbidLaravelMassAssignmentSniffTest extends EcsTestCase
                 eval(<<<'PHP'
                 namespace Illuminate\Database\Eloquent;
                 class Model {}
+                class Builder {}
+                namespace Illuminate\Database\Eloquent\Relations;
+                class Relation {}
                 namespace Milewski\ECS\Tests\Support;
+                class CustomBuilder extends \Illuminate\Database\Eloquent\Builder {
+                    public function fluent(): static {}
+                }
+                class CustomRelation extends \Illuminate\Database\Eloquent\Relations\Relation {}
                 class AutoloadedRecord extends \Illuminate\Database\Eloquent\Model {
                     public \Illuminate\Database\Eloquent\Model $model;
+                    public CustomBuilder $builder;
                     public $untyped;
                     public function model(): \Illuminate\Database\Eloquent\Model {}
+                    public function query(): CustomBuilder {}
+                    public function relation(): CustomRelation {}
                     public function fluent(): static {}
                     public function untyped() {}
                 }
@@ -324,6 +444,9 @@ final class ForbidLaravelMassAssignmentSniffTest extends EcsTestCase
                 $record->untyped()->fill($data);
                 $record->untyped->update($data);
                 $record->missing->update($data);
+                $record->builder->update($data);
+                $record->query()->fluent()->update($data);
+                $record->relation()->update($data);
             }
             PHP);
 
