@@ -31,7 +31,7 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
     public function getDefinition(): FixerDefinitionInterface
     {
         return new FixerDefinition(
-            summary: 'Method chains have no blank lines between links. Long chains of at least two method calls place each method on a separate line.',
+            summary: 'Method chains have no blank lines between links. Long or already multiline chains place each continuation on a separate line.',
             codeSamples: [
                 new CodeSample(
                     code: "<?php\n\$repository->findAllMatchingRecords(\$criteria)->map(\$callback)->all();\n",
@@ -82,10 +82,19 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
             }
 
-            if ($tokens[ $index ]->isObjectOperator() === false
-                || $booleanExpressions->contains($tokens[ $index ])
-                || $this->methodParentheses($tokens, $index) === null
-                || $this->continuesMethodChain($tokens, $index)) {
+            if ($tokens[ $index ]->isObjectOperator() === false) {
+                continue;
+            }
+
+            if ($booleanExpressions->contains($tokens[ $index ])) {
+                continue;
+            }
+
+            if ($this->methodParentheses($tokens, $index) === null) {
+                continue;
+            }
+
+            if ($this->continuesMethodChain($tokens, $index)) {
                 continue;
             }
 
@@ -106,15 +115,39 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
 
             }
 
-            if (count($operators) < 2 || $this->hasInlineLinks($tokens, $operators) === false) {
+            if (count($operators) < 2) {
+                continue;
+            }
+
+            $hasMultilineLinks = $this->hasMultilineLinks($tokens, $operators);
+
+            if ($hasMultilineLinks) {
+
+                $receiverEnd = $tokens->getPrevMeaningfulToken($operators[ 0 ]);
+
+                if ($tokens[ $receiverEnd ]->equals(')') === false) {
+
+                    if ($tokens->isPartialCodeMultiline($receiverEnd, $operators[ 0 ]) === false) {
+                        array_shift($operators);
+                    }
+
+                }
+
+            }
+
+            if ($this->hasInlineLinks($tokens, $operators) === false) {
                 continue;
             }
 
             $receiverStart = $this->receiverStart($tokens, $index);
             $indentation = $this->getLineIndentation($tokens, $receiverStart);
 
-            if ($this->lineLength($tokens, $receiverStart, $closeParenthesis) <= $this->configuration[ 'max_line_length' ]) {
-                continue;
+            if ($hasMultilineLinks === false) {
+
+                if ($this->lineLength($tokens, $receiverStart, $closeParenthesis) <= $this->configuration[ 'max_line_length' ]) {
+                    continue;
+                }
+
             }
 
             $whitespace = $this->whitespacesConfig->getLineEnding()
@@ -161,11 +194,29 @@ final class MethodChainFixer extends AbstractFixer implements ConfigurableFixerI
      */
     private function hasInlineLinks(Tokens $tokens, array $operators): bool
     {
-        foreach (array_slice($operators, 1) as $operator) {
+        foreach ($operators as $operator) {
 
             $previous = $tokens->getPrevMeaningfulToken($operator);
 
             if ($tokens->isPartialCodeMultiline($previous, $operator) === false) {
+                return true;
+            }
+
+        }
+
+        return false;
+    }
+
+    /**
+     * @param list<int> $operators
+     */
+    private function hasMultilineLinks(Tokens $tokens, array $operators): bool
+    {
+        foreach ($operators as $operator) {
+
+            $previous = $tokens->getPrevMeaningfulToken($operator);
+
+            if ($tokens->isPartialCodeMultiline($previous, $operator)) {
                 return true;
             }
 

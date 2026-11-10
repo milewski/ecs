@@ -95,6 +95,96 @@ final class MethodChainFixerTest extends FixerTestCase
         $this->assertSame($input, $this->fix($input, 40));
     }
 
+    #[DataProvider('providePartiallyMultilineChains')]
+    public function test_multiline_chains_put_each_continuation_on_its_own_line(string $input, string $expected): void
+    {
+        $input = "<?php\n" . $input . ";\n";
+        $expected = "<?php\n" . $expected . ";\n";
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public static function providePartiallyMultilineChains(): array
+    {
+        return [
+            'static factory with inline first filter' => [
+                "Customer::query()->where('affiliate_id', \$affiliateId)\n    ->get()",
+                "Customer::query()\n    ->where('affiliate_id', \$affiliateId)\n    ->get()",
+            ],
+            'inline calls before and after a split' => [
+                "\$this->velocityWindow(\$now)->where('affiliate_id', \$affiliateId)\n    ->selectRaw('count(*) as day_count')->toBase()->first()",
+                "\$this->velocityWindow(\$now)\n    ->where('affiliate_id', \$affiliateId)\n    ->selectRaw('count(*) as day_count')\n    ->toBase()\n    ->first()",
+            ],
+            'short mixed chain' => [
+                "\$query->first()\n    ->second()->all()",
+                "\$query->first()\n    ->second()\n    ->all()",
+            ],
+            'receiver already on a separate line' => [
+                "\$query\n    ->first()->all()",
+                "\$query\n    ->first()\n    ->all()",
+            ],
+            'nullsafe continuations' => [
+                "\$query?->first()\n    ?->second()?->all()",
+                "\$query?->first()\n    ?->second()\n    ?->all()",
+            ],
+            'nested chains stay independent' => [
+                "\$query->map(fn (\$item) => \$item->first()->last())\n    ->values()->all()",
+                "\$query->map(fn (\$item) => \$item->first()->last())\n    ->values()\n    ->all()",
+            ],
+            'multiline arguments alone do not split the chain' => [
+                "\$query->where(\n    'id',\n    \$id,\n)->get()",
+                "\$query->where(\n    'id',\n    \$id,\n)->get()",
+            ],
+            'multiline chain inside a control header is preserved' => [
+                "if (\$query->first()\n    ->second()->exists()) {}",
+                "if (\$query->first()\n    ->second()->exists()) {}",
+            ],
+            'multiline boolean operand is preserved' => [
+                "\$allowed = \$query->first()\n    ->second()->exists() === true",
+                "\$allowed = \$query->first()\n    ->second()->exists() === true",
+            ],
+            'multiline chain inside sprintf is preserved' => [
+                "sprintf('%s', \$query->first()\n    ->second()->all())",
+                "sprintf('%s', \$query->first()\n    ->second()->all())",
+            ],
+        ];
+    }
+
+    public function test_partially_multiline_chain_wrapping_respects_tabs_and_crlf(): void
+    {
+        $input = "<?php\r\n\t\$this->query()->first()\r\n\t\t->last()->all();\r\n";
+        $expected = "<?php\r\n\t\$this->query()\r\n\t\t->first()\r\n\t\t->last()\r\n\t\t->all();\r\n";
+        $whitespaces = new WhitespacesFixerConfig("\t", "\r\n");
+
+        $this->assertSame($expected, $this->fix($input, 120, $whitespaces));
+        $this->assertSame($expected, $this->fix($expected, 120, $whitespaces));
+    }
+
+    public function test_the_initial_receiver_and_clean_payment_chain_are_preserved(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        final class AffiliateQueries
+        {
+            public function mcpPayments(AffiliatePayoutListFilterData $filters): LengthAwarePaginator
+            {
+                return $this->withWeeklyPayout(AffiliatePayout::query())
+                    ->when($filters->affiliateId !== null, static fn (Builder $sent): Builder => $sent->where('affiliate_id', $filters->affiliateId))
+                    ->when($filters->from !== null, static fn (Builder $sent): Builder => $sent->where('paid_on', '>=', $filters->from))
+                    ->when($filters->until !== null, static fn (Builder $sent): Builder => $sent->where('paid_on', '<=', $filters->until))
+                    ->orderByDesc('paid_on')
+                    ->orderByDesc('created_at')
+                    ->orderBy('id')
+                    ->paginate($filters->perPage, [ '*' ], 'page', $filters->page);
+            }
+        }
+        PHP;
+
+        $this->assertSame($input, $this->fix($input));
+        $this->assertSame($input, $this->fix($this->fix($input)));
+    }
+
     public function test_default_chain_length_boundary(): void
     {
         $base = '$repository->first(\'\')->last();';
