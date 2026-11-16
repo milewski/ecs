@@ -8,6 +8,22 @@ use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class CallExpressionLayoutTest extends EcsTestCase
 {
+    public function test_short_factory_arguments_inside_an_arrow_callback_stay_inline(): void
+    {
+        $input = <<<'PHP'
+        <?php
+
+        declare(strict_types = 1);
+
+        test('creates a shipped order without events', function (): void {
+            $missed = Order::withoutEvents(fn (): Order => OrderFactory::new()->withProduct($this->product, 2)->create([ 'status' => OrderStatus::Shipped->value ]));
+        });
+
+        PHP;
+
+        $this->assertCodeIsFixedTo($input, $input);
+    }
+
     public function test_sprintf_moves_onto_its_parent_argument_line(): void
     {
         $this->assertFixtureIsFixedTo(

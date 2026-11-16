@@ -115,6 +115,42 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
         $this->assertSame($input, $this->fix($input, 40));
     }
 
+    public function test_short_calls_inside_an_arrow_callback_stay_inline(): void
+    {
+        $input = <<<'PHP'
+        <?php
+                $missed = Order::withoutEvents(fn (): Order => OrderFactory::new()->withProduct($this->product, 2)->create([ 'status' => OrderStatus::Shipped->value ]));
+        PHP;
+
+        $this->assertSame($input, $this->fix($input));
+    }
+
+    public function test_imported_trait_methods_use_their_declared_parameter_names(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        use Milewski\ECS\Tests\Support\ReflectionPestAssertions;
+        class SupplierToolsTest {
+            use ReflectionPestAssertions;
+            public function run(): void {
+                $this->assertResourceAccess(
+                    $resource,
+                    'read',
+                );
+            }
+        }
+        PHP;
+
+        $expected = str_replace(
+            [ '$resource,', "'read'," ],
+            [ 'resource: $resource,', "ability: 'read'," ],
+            $input,
+        );
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
     public function test_resolved_function_arguments_are_named_after_wrapping(): void
     {
         $declaration = "<?php\nfunction combine(string \$first, string \$second): void {}\n";
@@ -134,7 +170,7 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
         $this->assertSame($expected, $this->fix($input, 40));
     }
 
-    public function test_nested_calls_expand_when_added_argument_names_exceed_the_limit(): void
+    public function test_short_nested_calls_stay_inline_after_the_outer_call_is_named(): void
     {
         $declarations = <<<'PHP'
         <?php
@@ -146,10 +182,7 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
         $input = $declarations . 'outer(inner($firstLongValue, $secondLongValue), $secondArgumentWithAnEspeciallyLongName);' . "\n";
         $expected = $declarations . <<<'PHP'
         outer(
-            payloadWithAnEspeciallyLongName: inner(
-                first: $firstLongValue,
-                second: $secondLongValue
-            ),
+            payloadWithAnEspeciallyLongName: inner($firstLongValue, $secondLongValue),
             other: $secondArgumentWithAnEspeciallyLongName
         );
 
@@ -157,6 +190,117 @@ final class MultilineNamedArgumentsFixerTest extends FixerTestCase
 
         $this->assertSame($expected, $this->fix($input, 70));
         $this->assertSame($expected, $this->fix($expected, 70));
+    }
+
+    public function test_inherited_mixins_resolve_imported_aliases(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        use Milewski\ECS\Tests\Support\ReflectionMcpServer;
+        final class MetaAdsServer extends ReflectionMcpServer {}
+        MetaAdsServer::tool(
+            app(MetaAdsEndpointCatalog::class)->tool('meta-ads-campaigns-write'),
+            [ 'operation' => 'campaigns-update', 'confirm' => true ],
+        )
+            ->assertHasErrors()
+            ->assertSee('mutation target');
+        PHP;
+
+        $expected = str_replace(
+            [ "    app(", "    [ 'operation'" ],
+            [ "    tool: app(", "    arguments: [ 'operation'" ],
+            $input,
+        );
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public function test_inherited_mixin_return_types_resolve_later_fluent_calls(): void
+    {
+        $input = <<<'PHP'
+        <?php
+        use Milewski\ECS\Tests\Support\ReflectionMcpServer;
+        final class MetaAdsServer extends ReflectionMcpServer {}
+        MetaAdsServer::tool('first', [])
+            ->tool(
+                'second',
+                [],
+            );
+        PHP;
+
+        $expected = str_replace(
+            [ "        'second',", '        [],' ],
+            [ "        tool: 'second',", '        arguments: [],' ],
+            $input,
+        );
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    #[DataProvider('provideTraitMethodDeclarations')]
+    public function test_trait_method_resolution_preserves_precedence_and_uncertainty(string $declarations, ?string $parameter): void
+    {
+        $call = "\$this->handle(\n            \$resource,\n            'read',\n        );";
+        $input = "<?php\n" . str_replace('__CALL__', $call, $declarations);
+        $expected = $input;
+
+        if ($parameter !== null) {
+
+            $namedCall = str_replace([ '$resource,', "'read'," ], [ $parameter . ': $resource,', "ability: 'read'," ], $call);
+            $expected = "<?php\n" . str_replace('__CALL__', $namedCall, $declarations);
+
+        }
+
+        $this->assertSame($expected, $this->fix($input));
+        $this->assertSame($expected, $this->fix($expected));
+    }
+
+    public static function provideTraitMethodDeclarations(): array
+    {
+        $handler = 'trait Handler { public function handle(object $resource, string $ability): void {} }';
+        $parent = 'class BaseHandler { public function handle(object $parentResource, string $ability): void {} }';
+        $run = 'public function run(): void { __CALL__ }';
+
+        return [
+            'local trait' => [ $handler . ' class Example { use Handler; ' . $run . ' }', 'resource' ],
+            'nested trait' => [ $handler . ' trait NestedHandler { use Handler; } class Example { use NestedHandler; ' . $run . ' }', 'resource' ],
+            'multiple traits in one use statement' => [ $handler . ' trait EmptyHandler {} class Example { use EmptyHandler, Handler; ' . $run . ' }', 'resource' ],
+            'separate trait uses' => [ $handler . ' trait EmptyHandler {} class Example { use EmptyHandler; use Handler; ' . $run . ' }', 'resource' ],
+            'trait overrides parent' => [ $handler . $parent . ' class Example extends BaseHandler { use Handler; ' . $run . ' }', 'resource' ],
+            'class overrides trait' => [ $handler . ' class Example { use Handler; public function handle(object $localResource, string $ability): void {} ' . $run . ' }', 'localResource' ],
+            'parent uses trait' => [ $handler . ' class BaseHandler { use Handler; } class Example extends BaseHandler { ' . $run . ' }', 'resource' ],
+            'unrelated trait allows parent lookup' => [ 'trait EmptyHandler {} ' . $parent . ' class Example extends BaseHandler { use EmptyHandler; ' . $run . ' }', 'parentResource' ],
+            'unknown trait' => [ $parent . ' class Example extends BaseHandler { use UnknownHandler; ' . $run . ' }', null ],
+            'conflicting traits' => [ $handler . ' trait OtherHandler { public function handle(object $otherResource, string $ability): void {} } ' . $parent . ' class Example extends BaseHandler { use Handler, OtherHandler; ' . $run . ' }', null ],
+            'adapted trait' => [ $handler . $parent . ' class Example extends BaseHandler { use Handler { handle as private; } ' . $run . ' }', null ],
+            'cyclic traits' => [ 'trait FirstHandler { use SecondHandler; } trait SecondHandler { use FirstHandler; } class Example { use FirstHandler; ' . $run . ' }', null ],
+            'unknown method' => [ 'trait EmptyHandler {} class Example { use EmptyHandler; ' . $run . ' }', null ],
+            'variadic trait method' => [ 'trait Handler { public function handle(object $resource, string ...$abilities): void {} } class Example { use Handler; ' . $run . ' }', null ],
+        ];
+    }
+
+    public function test_nested_calls_still_expand_when_their_own_arguments_exceed_the_limit(): void
+    {
+        $input = "<?php\nouter(fn () => inner(\$firstArgumentWithALongName, \$secondArgumentWithALongName));";
+        $expected = "<?php\nouter(fn () => inner(\n    \$firstArgumentWithALongName,\n    \$secondArgumentWithALongName\n));";
+
+        $this->assertSame($expected, $this->fix($input, 60));
+        $this->assertSame($expected, $this->fix($expected, 60));
+    }
+
+    public function test_nested_call_length_boundary_excludes_the_enclosing_callback(): void
+    {
+        $base = "inner('', 'second')";
+        $atLimit = str_replace("''", "'" . str_repeat('x', 140 - strlen($base)) . "'", $base);
+        $aboveLimit = str_replace("''", "'" . str_repeat('x', 141 - strlen($base)) . "'", $base);
+        $input = "<?php\nouter(fn () => " . $atLimit . ');';
+        $expected = "<?php\nouter(fn () => " . str_replace([ '(', ', ', ')' ], [ "(\n    ", ",\n    ", "\n)" ], $aboveLimit) . ');';
+
+        $this->assertSame($input, $this->fix($input));
+        $this->assertSame($expected, $this->fix("<?php\nouter(fn () => " . $aboveLimit . ');'));
+        $this->assertSame($expected, $this->fix($expected));
     }
 
     #[DataProvider('provideInvalidLimits')]

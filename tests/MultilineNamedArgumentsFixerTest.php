@@ -8,6 +8,86 @@ use Milewski\ECS\Tests\Support\EcsTestCase;
 
 final class MultilineNamedArgumentsFixerTest extends EcsTestCase
 {
+    public function test_supplier_trait_calls_receive_named_arguments_in_the_default_preset(): void
+    {
+        $input = <<<'PHP'
+        <?php
+
+        declare(strict_types = 1);
+
+        use Milewski\ECS\Tests\Support\ReflectionSupplierTools as CallsSupplierPricingTools;
+
+        final class SupplierToolsTest
+        {
+            use CallsSupplierPricingTools;
+
+            public function archive(array $supplier): void
+            {
+                $contact = $this->supplierToolResult(
+                    UpsertSupplierContactTool::class,
+                    [ 'supplier_slug' => $supplier[ 'slug' ], 'name' => 'Test Contact A', 'is_primary' => true ],
+                );
+
+                $archivedContact = $this->supplierToolResult(
+                    ArchiveSupplierContactTool::class,
+                    [ 'supplier_slug' => $supplier[ 'slug' ], 'id' => $contact[ 'id' ], 'reason' => 'Test contact archived.' ],
+                );
+
+                $archivedSupplier = $this->supplierToolResult(
+                    ArchiveSupplierTool::class,
+                    [ 'slug' => $supplier[ 'slug' ], 'reason' => 'Test supplier archived.' ],
+                );
+            }
+        }
+
+        PHP;
+
+        $expected = str_replace(
+            [ 'UpsertSupplierContactTool::class,', 'ArchiveSupplierContactTool::class,', 'ArchiveSupplierTool::class,', "            [ '" ],
+            [ 'tool: UpsertSupplierContactTool::class,', 'tool: ArchiveSupplierContactTool::class,', 'tool: ArchiveSupplierTool::class,', "            arguments: [ '" ],
+            $input,
+        );
+
+        $this->assertCodeIsFixedTo($input, $expected, 'SupplierToolsTest.php');
+        $this->assertCodeIsFixedTo($expected, $expected, 'SupplierToolsTest.php');
+    }
+
+    public function test_inherited_mcp_mixin_arguments_are_named_in_the_default_preset(): void
+    {
+        $input = <<<'PHP'
+        <?php
+
+        declare(strict_types = 1);
+
+        use Milewski\ECS\Tests\Support\ReflectionMcpServer as MetaAdsServer;
+
+        test('a mismatched mutation target identity cannot authorize a write', function (): void {
+
+            meta_management_fake([ 'GET /201' => [ 'id' => '202', 'account_id' => '123' ] ]);
+
+            MetaAdsServer::tool(
+                app(MetaAdsEndpointCatalog::class)->tool('meta-ads-campaigns-write'),
+                [ 'operation' => 'campaigns-update', 'params' => [ 'account_id' => '123', 'campaign_id' => '201' ], 'body' => [ 'name' => 'Synthetic update' ], 'confirm' => true ],
+            )
+                ->assertHasErrors()
+                ->assertSee('mutation target');
+
+            Http::assertNotSent(static fn (Request $request): bool => $request->method() === 'POST');
+
+        });
+
+        PHP;
+
+        $expected = str_replace(
+            [ "        app(", "        [ 'operation'" ],
+            [ "        tool: app(", "        arguments: [ 'operation'" ],
+            $input,
+        );
+
+        $this->assertCodeIsFixedTo($input, $expected);
+        $this->assertCodeIsFixedTo($expected, $expected);
+    }
+
     public function test_pest_test_headers_are_inline_and_positional_in_the_default_preset(): void
     {
         $input = <<<'PHP'
