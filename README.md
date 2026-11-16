@@ -78,6 +78,10 @@ return register_fixers([
 
 Single argument callbacks stay compact. Arguments whose parameter names are unavailable or whose binding depends on variadic parameters or unpacking are wrapped without changing their binding. Builder types assigned outside a conditional remain available inside its branches; typed `when` and `unless` callbacks that return the same builder preserve that type for resolving forwarded methods such as `whereRaw(sql: ..., bindings: ...)`.
 
+Nested calls measure their own name and arguments with the current indentation for the wrapping threshold. Short calls such as `withProduct($this->product, 2)` stay inline inside an arrow callback, even when the complete enclosing statement exceeds 140 characters. Nested calls with long argument lists still expand.
+
+Parameter names resolve through imported and nested traits, with class methods taking precedence over traits and traits over parent methods. Unknown or conflicting traits and unresolved trait adaptations keep calls positional. Inherited PHPDoc mixins also resolve imported class aliases, including Laravel MCP server testing calls such as `MetaAdsServer::tool(tool: ..., arguments: ...)`.
+
 Registered closure macros use their declared parameter names. Livewire form assertions also resolve the installed Filament form mixins without booting the application or executing their factories. For example, a two-argument `assertFormFieldExists(...)` call uses `key:` and `form:`; Filament accepts a callback in that second position. Conditional factories and unknown macro signatures remain positional.
 
 ## Array layout

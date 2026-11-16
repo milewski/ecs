@@ -21,6 +21,7 @@ use PhpCsFixer\FixerConfiguration\FixerOptionBuilder;
 use PhpCsFixer\FixerDefinition\CodeSample;
 use PhpCsFixer\FixerDefinition\FixerDefinition;
 use PhpCsFixer\FixerDefinition\FixerDefinitionInterface;
+use PhpCsFixer\Tokenizer\Analyzer\NamespaceUsesAnalyzer;
 use PhpCsFixer\Tokenizer\CT;
 use PhpCsFixer\Tokenizer\Token;
 use PhpCsFixer\Tokenizer\Tokens;
@@ -59,6 +60,8 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
      *     name: string|null,
      *     rawParent: string|null,
      *     parent: string|null,
+     *     traits: list<string>,
+     *     hasTraitAdaptations: bool,
      *     methods: array<string, list<array{name: string, variadic: bool}>>,
      *     methodReturnTypes: array<string, string|null>
      * }>
@@ -94,6 +97,11 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
      * @var array<int, list<string>>
      */
     private array $pestThisTypes = [];
+
+    /**
+     * @var array<string, array<string, string>>
+     */
+    private array $reflectionClassImports = [];
 
     private ?ReturnedClosureAnalyzer $returnedClosureAnalyzer = null;
 
@@ -326,10 +334,20 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             $hasSprintfArgument = $this->hasSprintfArgument($tokens, $arguments);
             $hasBrokenChain = $this->hasBrokenChainArgument($tokens, $arguments);
 
-            if ((count($arguments) < 2 && $hasSprintfArgument === false)
-                || ($hasSprintfArgument === false && $hasBrokenChain === false
-                    && LineLengthAnalyzer::maximumLength($tokens, $index, $index) <= $this->configuration[ 'max_line_length' ])) {
-                continue;
+            if ($hasSprintfArgument === false) {
+
+                if (count($arguments) < 2) {
+                    continue;
+                }
+
+                if ($hasBrokenChain === false) {
+
+                    if ($this->callLineLength($tokens, $index, $closeParenthesis) <= $this->configuration[ 'max_line_length' ]) {
+                        continue;
+                    }
+
+                }
+
             }
 
             $indentation = $this->getLineIndentation($tokens, $index);
@@ -347,6 +365,47 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         }
 
         return $changed;
+    }
+
+    private function callLineLength(Tokens $tokens, int $openParenthesis, int $closeParenthesis): int
+    {
+        for ($index = $openParenthesis - 1; $index >= 0; $index--) {
+
+            if ($tokens[ $index ]->equalsAny([ ';', '{' ])) {
+                break;
+            }
+
+            $block = Tokens::detectBlockType($tokens[ $index ]);
+
+            if ($block !== null) {
+
+                if ($block[ 'isStart' ] === false) {
+
+                    $index = $tokens->findBlockStart($block[ 'type' ], $index);
+
+                    continue;
+
+                }
+
+            }
+
+            if ($tokens[ $index ]->equals('(') === false) {
+                continue;
+            }
+
+            if ($this->isCallArgumentList($tokens, $index)) {
+
+                $nameIndex = $tokens->getPrevMeaningfulToken($openParenthesis);
+                $lines = preg_split('/\R/', $tokens->generatePartialCode($nameIndex, $closeParenthesis));
+                $lines[ 0 ] = $this->getLineIndentation($tokens, $openParenthesis) . $lines[ 0 ];
+
+                return max(array_map(strlen(...), $lines));
+
+            }
+
+        }
+
+        return LineLengthAnalyzer::maximumLength($tokens, $openParenthesis, $openParenthesis);
     }
 
     /**
@@ -557,6 +616,7 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         $this->collectImports($tokens);
         $this->resolveClassNames();
+        $this->collectClassTraits($tokens);
         $this->pestThisTypes = $this->collectPestThisTypes($tokens);
         $this->collectCallableDeclarations($tokens);
         $this->compactBooleanCalls($tokens);
@@ -713,6 +773,8 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
      *     name: string|null,
      *     rawParent: string|null,
      *     parent: string|null,
+     *     traits: list<string>,
+     *     hasTraitAdaptations: bool,
      *     methods: array<string, list<array{name: string, variadic: bool}>>,
      *     methodReturnTypes: array<string, string|null>
      * }>
@@ -770,6 +832,8 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
                 'name' => null,
                 'rawParent' => $rawParent,
                 'parent' => null,
+                'traits' => [],
+                'hasTraitAdaptations' => false,
                 'methods' => [],
                 'methodReturnTypes' => [],
             ];
@@ -777,6 +841,52 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
         }
 
         return $classes;
+    }
+
+    private function collectClassTraits(Tokens $tokens): void
+    {
+        foreach ($this->classes as $classIndex => $class) {
+
+            for ($index = $class[ 'start' ] + 1; $index < $class[ 'end' ]; $index++) {
+
+                if ($tokens[ $index ]->isGivenKind(CT::T_USE_TRAIT)) {
+
+                    $end = $tokens->getNextTokenOfKind($index, [ ';', '{' ]);
+
+                    for ($nameIndex = $tokens->getNextMeaningfulToken($index); $nameIndex < $end; $nameIndex++) {
+
+                        if ($this->isNameToken($tokens[ $nameIndex ]) === false) {
+                            continue;
+                        }
+
+                        $this->classes[ $classIndex ][ 'traits' ][] = $this->resolveClassIdentifier(
+                            $tokens[ $nameIndex ]->getContent(),
+                            $nameIndex,
+                        );
+
+                    }
+
+                    if ($tokens[ $end ]->equals('{')) {
+                        $this->classes[ $classIndex ][ 'hasTraitAdaptations' ] = true;
+                    }
+
+                    $index = $end;
+
+                }
+
+                $block = Tokens::detectBlockType($tokens[ $index ]);
+
+                if ($block !== null) {
+
+                    if ($block[ 'isStart' ]) {
+                        $index = $tokens->findBlockEnd($block[ 'type' ], $index);
+                    }
+
+                }
+
+            }
+
+        }
     }
 
     private function collectImports(Tokens $tokens): void
@@ -2485,6 +2595,36 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
             return $parameters;
         }
 
+        if ($this->classes[ $classIndex ][ 'hasTraitAdaptations' ]) {
+            return null;
+        }
+
+        $traitParameters = null;
+
+        foreach ($this->classes[ $classIndex ][ 'traits' ] as $trait) {
+
+            if ($this->isTraitReference($trait) !== true) {
+                return null;
+            }
+
+            $parameters = $this->resolveMethod($trait, $method, $visited);
+
+            if ($parameters === null) {
+                continue;
+            }
+
+            if ($traitParameters !== null) {
+                return null;
+            }
+
+            $traitParameters = $parameters;
+
+        }
+
+        if ($traitParameters !== null) {
+            return $traitParameters;
+        }
+
         $parent = $this->classes[ $classIndex ][ 'parent' ];
 
         return $parent === null ? null : $this->resolveMethod($parent, $method, $visited);
@@ -2979,7 +3119,9 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
         }
 
-        return null;
+        $parent = $class->getParentClass();
+
+        return $parent === false ? null : $this->findReflectionMethod($parent, $method, $visited);
     }
 
     /**
@@ -2989,8 +3131,11 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
     {
         $docComment = $class->getDocComment();
 
-        if ($docComment === false
-            || preg_match_all('/@mixin\s+([^\s]+)/', $docComment, $matches) < 1) {
+        if ($docComment === false) {
+            return [];
+        }
+
+        if (preg_match_all('/@mixin\s+([^\s]+)/', $docComment, $matches) < 1) {
             return [];
         }
 
@@ -3008,11 +3153,88 @@ final class MultilineNamedArgumentsFixer extends AbstractFixer implements Config
 
             }
 
+            $parts = explode('\\', $type);
+            $imports = $this->reflectionClassImports($class);
+            $import = $imports[ strtolower($parts[ 0 ]) ] ?? null;
+
+            if ($import !== null) {
+
+                array_shift($parts);
+                $classNames[] = $parts === [] ? $import : $import . '\\' . implode('\\', $parts);
+
+                continue;
+
+            }
+
             $classNames[] = $this->qualifyName($class->getNamespaceName(), $type);
 
         }
 
         return $classNames;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function reflectionClassImports(ReflectionClass $class): array
+    {
+        $className = $class->getName();
+
+        if (isset($this->reflectionClassImports[ $className ])) {
+            return $this->reflectionClassImports[ $className ];
+        }
+
+        $this->reflectionClassImports[ $className ] = [];
+        $file = $class->getFileName();
+
+        if ($file === false) {
+            return [];
+        }
+
+        if (is_file($file) === false) {
+            return [];
+        }
+
+        $source = file_get_contents($file);
+
+        if ($source === false) {
+            return [];
+        }
+
+        $tokens = Tokens::fromCode($source);
+        $line = 1;
+
+        foreach ($tokens as $position => $token) {
+
+            if ($line >= $class->getStartLine()) {
+                break;
+            }
+
+            $line += substr_count($token->getContent(), "\n");
+
+        }
+
+        foreach ($tokens->getNamespaceDeclarations() as $namespace) {
+
+            if ($position < $namespace->getScopeStartIndex()) {
+                continue;
+            }
+
+            if ($position > $namespace->getScopeEndIndex()) {
+                continue;
+            }
+
+            foreach (new NamespaceUsesAnalyzer()->getDeclarationsInNamespace($tokens, $namespace, true) as $import) {
+
+                if ($import->isClass()) {
+                    $this->reflectionClassImports[ $className ][ strtolower($import->getShortName()) ] = $import->getFullName();
+                }
+
+            }
+
+        }
+
+        return $this->reflectionClassImports[ $className ];
     }
 
     private function resolveReflectedMethodReturnClass(ReflectionMethod $method): ?string
